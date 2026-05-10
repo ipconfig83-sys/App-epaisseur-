@@ -175,7 +175,11 @@ export async function exportReportPdf(
   // Footer
   pdf.setTextColor(120, 120, 130);
   pdf.setFontSize(8);
-  pdf.text('PRESBYTA · Confidential lens estimation report · presbyta.optical', 14, 290);
+  pdf.text(
+    'PRESBYTA · A Lunette 15 Minutes brand · Confidential lens estimation report',
+    14,
+    290
+  );
 
   pdf.save(`presbyta-report-${Date.now()}.pdf`);
 }

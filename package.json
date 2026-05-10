@@ -2,7 +2,7 @@
   "name": "presbyta-lens-simulator",
   "private": true,
   "version": "1.0.0",
-  "description": "PRESBYTA - Professional Ophthalmic Lens Thickness Simulator with real-time 3D visualization",
+  "description": "PRESBYTA — Professional ophthalmic lens brand by Lunette 15 Minutes. Real-time lens thickness simulator and dispensing intelligence suite for opticians and optical laboratories.",
   "type": "module",
   "scripts": {
     "dev": "vite",

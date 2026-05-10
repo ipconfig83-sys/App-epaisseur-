@@ -98,8 +98,12 @@ All formulas are documented inline in `src/engine/calculate.ts`.
 
 ## Branding
 
-PRESBYTA is a fictional optical brand specialized in lens optimization
-tools for optical professionals. The included logo is a placeholder SVG.
+**PRESBYTA** is a professional ophthalmic lens brand owned by
+**Lunette 15 Minutes**, specialised in premium lens optimisation for
+opticians and optical laboratories. The simulator presented here is
+the public interface of PRESBYTA's in-house dispensing intelligence
+suite. The included logo is a placeholder SVG that can be replaced
+with the official brand assets.
 
 ## License
 

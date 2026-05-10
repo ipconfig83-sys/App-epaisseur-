@@ -103,10 +103,20 @@ export default {
   },
   about: {
     title: 'À propos de PRESBYTA',
-    intro: 'PRESBYTA est une marque professionnelle de verres ophtalmiques spécialisée dans l\'optimisation des verres.',
-    p1: 'Nous concevons des outils d\'estimation intelligents qui permettent aux opticiens et aux laboratoires de prendre des décisions de prescription éclairées.',
-    p2: 'Notre moteur de simulation combine optique géométrique, fiches matériaux fabricants et heuristiques validées en laboratoire pour prédire l\'épaisseur, le poids et l\'aspect cosmétique avec précision millimétrique.',
-    p3: 'Conçu pour les laboratoires, opticiens et pratique clinique — PRESBYTA est entièrement dédié aux professionnels de l\'optique.',
+    eyebrow: 'Une marque Lunette 15 Minutes',
+    intro: 'PRESBYTA est une marque professionnelle de verres ophtalmiques, propriété de Lunette 15 Minutes, dédiée à l\'optimisation premium des verres pour les opticiens et les laboratoires d\'optique.',
+    p1: 'PRESBYTA conçoit et fournit des verres ophtalmiques haute performance ainsi que des outils numériques de dispensation. La marque s\'adresse exclusivement aux professionnels de l\'optique — opticiens indépendants, laboratoires de surfaçage et équipes cliniques de dispensation exigeant une ingénierie verre fondée sur la preuve.',
+    p2: 'Notre moteur de simulation combine optique géométrique rigoureuse, conformité ANSI Z80.1, fiches matériaux des fabricants et heuristiques validées en laboratoire pour prédire l\'épaisseur, le poids et l\'esthétique du verre avec une précision millimétrique — avant qu\'un seul palet ne soit détouré.',
+    p3: 'Développé avec des opticiens en exercice et des maîtres surfaceurs, PRESBYTA est entièrement dédié à l\'amélioration de la précision de dispensation, de la compatibilité monture–verre et du confort du porteur tout au long de la chaîne de valeur.',
+    ownerLine: 'PRESBYTA est une marque déposée de verres ophtalmiques de Lunette 15 Minutes.',
+    audience: {
+      opticians: 'Opticiens',
+      opticiansDesc: 'Validation d\'ordonnance plus rapide, conseil patient plus clair, moins de refaits.',
+      labs: 'Laboratoires d\'optique',
+      labsDesc: 'Optimisation MBS, allègement prismatique, audit de conformité ANSI.',
+      clinical: 'Pratique clinique',
+      clinicalDesc: 'Aide à la décision pour Rx complexes et associations monture–verre exigeantes.',
+    },
     features: {
       precision: 'Précision millimétrique',
       precisionDesc: 'Estimation géométrique par sagittes, validée selon les normes MBS.',
@@ -115,7 +125,7 @@ export default {
       compare: 'Comparaison matériaux',
       compareDesc: 'Comparez 6 indices et 4 matériaux côte à côte.',
       pro: 'Qualité professionnelle',
-      proDesc: 'Conçu pour opticiens, labos et usage clinique.',
+      proDesc: 'Conçu pour opticiens, laboratoires de surfaçage et usage clinique.',
     },
   },
   warnings: {

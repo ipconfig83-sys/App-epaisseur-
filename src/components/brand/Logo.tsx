@@ -34,7 +34,7 @@ export default function Logo({ size = 36, showWordmark = true }: LogoProps) {
             PRESBYTA
           </div>
           <div className="text-[10px] tracking-[0.3em] uppercase text-gold-300/80">
-            Optical Lab Suite
+            Ophthalmic Lenses
           </div>
         </div>
       )}
