@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { radiusFromPower, recommendBaseCurve, sagitta } from '@/engine/calculate';
+import { radiusFromPower, sagitta } from '@/engine/geometry';
+import { recommendBaseCurve } from '@/engine/curves';
 import type { LensData } from '@/types';
 
 // =====================================================================
@@ -32,7 +33,7 @@ export function buildLensGeometry(
 
   const radiusMm = lens.diameter / 2;
   const isPlus = lens.sphere + lens.cylinder / 2 >= 0;
-  const baseCurve = recommendBaseCurve(lens.sphere);
+  const baseCurve = recommendBaseCurve(lens.sphere, lens.material, lens.type);
   const totalPower = lens.sphere + (isPlus ? 0 : lens.cylinder);
   const backPower = totalPower - baseCurve;
 

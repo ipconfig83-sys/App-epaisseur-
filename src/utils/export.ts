@@ -105,12 +105,57 @@ export async function exportReportPdf(
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(10);
   y += 6;
-  pdf.text(`Centre thickness:        ${result.centerThickness.toFixed(2)} mm`, 14, y); y += 5;
-  pdf.text(`Edge thickness:          ${result.edgeThickness.toFixed(2)} mm`, 14, y); y += 5;
-  pdf.text(`Final edge (after edging): ${result.finalEdgeThickness.toFixed(2)} mm`, 14, y); y += 5;
-  pdf.text(`Base curve:              ${result.baseCurve.toFixed(1)} D`, 14, y); y += 5;
-  pdf.text(`Estimated weight:        ${result.weight.toFixed(1)} g`, 14, y); y += 5;
-  pdf.text(`Recommended index:       ${result.optimalIndex}`, 14, y);
+  pdf.text(`Centre thickness:           ${result.centerThickness.toFixed(2)} mm`, 14, y); y += 5;
+  pdf.text(`Edge (uncut, worst):        ${result.edgeThickness.toFixed(2)} mm`, 14, y); y += 5;
+  pdf.text(`Final edge (after edging):  ${result.finalEdgeThickness.toFixed(2)} mm`, 14, y); y += 5;
+  pdf.text(`Edge min / max:             ${result.edgeThicknessMin.toFixed(2)} / ${result.edgeThicknessMax.toFixed(2)} mm`, 14, y); y += 5;
+  pdf.text(`Base / back curve:          ${result.baseCurve.toFixed(2)} / ${result.backCurve.toFixed(2)} D`, 14, y); y += 5;
+  pdf.text(`Estimated weight:           ${result.weight.toFixed(1)} g`, 14, y); y += 5;
+  pdf.text(`Recommended index:          ${result.optimalIndex}`, 14, y); y += 5;
+
+  // Meridians
+  y += 5;
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Principal meridians', 14, y);
+  pdf.setFont('helvetica', 'normal');
+  for (const m of result.meridians) {
+    y += 5;
+    pdf.text(
+      `  M @ ${m.axis.toFixed(0)}°  F=${m.power.toFixed(2)} D · F1=${m.frontPower.toFixed(2)} F2=${m.backPower.toFixed(2)} · Et=${m.edgeThickness.toFixed(2)} mm`,
+      14, y
+    );
+  }
+
+  // Blank analysis
+  y += 8;
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Blank optimization', 14, y);
+  pdf.setFont('helvetica', 'normal');
+  y += 5;
+  pdf.text(`MBS: ${result.blank.minimumBlankSize.toFixed(1)} mm  ·  Ø used: ${result.blank.uncutDiameterUsed.toFixed(0)} mm  ·  fits: ${result.blank.fits ? 'YES' : 'NO'}`, 14, y);
+  y += 5;
+  pdf.text(`Decentration H/V/total: ${result.blank.effectiveDecentrationH.toFixed(2)} / ${result.blank.effectiveDecentrationV.toFixed(2)} / ${result.blank.totalDecentration.toFixed(2)} mm`, 14, y);
+
+  // ANSI
+  y += 8;
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('ANSI Z80.1 compliance', 14, y);
+  pdf.setFont('helvetica', 'normal');
+  y += 5;
+  pdf.text(`Min Ct: ${result.ansi.ansiCenterMin.toFixed(2)} mm (${result.ansi.centerOk ? 'OK' : 'BELOW'}) · Min Et: ${result.ansi.ansiEdgeMin.toFixed(2)} mm (${result.ansi.edgeOk ? 'OK' : 'BELOW'})`, 14, y);
+
+  // Prism thinning
+  if (result.prismThinning.applied) {
+    y += 8;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Prism thinning', 14, y);
+    pdf.setFont('helvetica', 'normal');
+    y += 5;
+    pdf.text(
+      `${result.prismThinning.prismDiopters.toFixed(2)} Δ ${result.prismThinning.base} · saves ${result.prismThinning.thicknessReductionMm.toFixed(2)} mm`,
+      14, y
+    );
+  }
 
   if (result.warnings.length) {
     y += 10;

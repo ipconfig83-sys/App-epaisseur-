@@ -8,6 +8,7 @@ import LensForm from '@/components/forms/LensForm';
 import ResultsPanel from '@/components/results/ResultsPanel';
 import ComparisonTable from '@/components/results/ComparisonTable';
 import Diagnostics from '@/components/results/Diagnostics';
+import EngineDetails from '@/components/results/EngineDetails';
 import Scene from '@/components/three/Scene';
 import ProfileView from '@/components/three/ProfileView';
 import { useSimulatorStore } from '@/store/useSimulatorStore';
@@ -112,6 +113,7 @@ export default function SimulatorPage() {
             comparison={result.comparison}
             optimal={result.optimalIndex}
           />
+          <EngineDetails result={result} />
           <Diagnostics warnings={result.warnings} />
         </div>
       </div>

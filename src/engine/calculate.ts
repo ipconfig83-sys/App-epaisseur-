@@ -1,224 +1,248 @@
 // =====================================================================
 // PRESBYTA — Optical Lens Thickness Calculation Engine
 // =====================================================================
-// All formulas below follow standard ophthalmic geometry conventions.
+// Orchestrates the full simulation pipeline used by the UI:
 //
-// Key conventions:
-//   • All linear dimensions are in millimetres unless stated otherwise.
-//   • Powers (sphere, cylinder, addition) are in dioptres (D).
-//   • Refractive index n is unitless; air assumed n0 = 1.
-//   • Thin-lens / sagitta approximations used for fast real-time UI.
+//   1. Decompose the prescription into two principal meridians.
+//   2. Recommend a material- and lens-type-aware base curve.
+//   3. Compute per-meridian sagittas and edge thickness on the uncut
+//      blank.
+//   4. Apply ANSI Z80.1 minima for centre / edge.
+//   5. Compute decentration (H + V), MBS, and worst-side cut diameter.
+//   6. Recompute final edge thickness on the cut diameter.
+//   7. For high-plus lenses, apply prism thinning to redistribute
+//      thickness.
+//   8. Estimate weight from material density and edged-volume
+//      approximation.
+//   9. Compare across all available indices and select the optimal
+//      candidate.
+//  10. Build a list of structured warnings (ANSI, MBS, brittleness…).
 //
-// References:
-//   - Jalie, M. — "Ophthalmic Lenses & Dispensing"
-//   - Brooks & Borish — "System for Ophthalmic Dispensing"
-//   - ISO 8980-1:2017 — Uncut finished spectacle lenses
+// All formulas are documented inline.  Unless stated otherwise, lengths
+// are in mm and powers in dioptres (D).
 // =====================================================================
 
 import type {
+  AnsiCheck,
+  BlankAnalysis,
   FrameData,
-  LensData,
-  ThicknessResult,
   IndexComparison,
+  LensData,
+  MeridianResult,
   RefractiveIndex,
+  ThicknessResult,
   Warning,
 } from '@/types';
-import { AVAILABLE_INDICES, DENSITY_BY_INDEX } from './materials';
+import { AVAILABLE_INDICES, DENSITY_BY_INDEX, MATERIALS } from './materials';
+import {
+  meridianPower,
+  radiusFromPower,
+  sagitta,
+  sphericalEquivalent,
+} from './geometry';
+import { recommendBaseCurve as suggestBase } from './curves';
+import { ansiCenterMin, ansiEdgeMin } from './ansi';
+import {
+  blankFits,
+  computeDecentration,
+  minimumBlankSize,
+  worstSideCutDiameter,
+} from './decentration';
+import { computePrismThinning } from './prism';
 
-// ----- Geometric helpers ----------------------------------------------
+// Re-exports kept for callers that imported from this module historically.
+export { sagitta, radiusFromPower } from './geometry';
+export { recommendBaseCurve } from './curves';
 
-/**
- * Sagitta of a spherical cap.
- *   s = R − √(R² − r²)
- * @param radius     surface radius of curvature (mm)
- * @param semiChord  half-chord = lens radius for that meridian (mm)
- */
-export function sagitta(radius: number, semiChord: number): number {
-  if (radius <= 0 || semiChord <= 0) return 0;
-  if (semiChord >= radius) return radius; // safety clamp at hemisphere
-  return radius - Math.sqrt(radius * radius - semiChord * semiChord);
+// ----- Per-meridian thickness computation -----------------------------
+
+function computeMeridian(
+  lens: LensData,
+  baseCurveD: number,
+  axisDeg: number,
+  thetaDeg: number
+): MeridianResult {
+  const F = meridianPower(lens.sphere, lens.cylinder, axisDeg, thetaDeg);
+  const F1 = baseCurveD;
+  const F2 = F - F1; // thin-lens additivity (vertex-distance corrections ignored at this scale)
+
+  const r1 = Math.abs(radiusFromPower(F1, lens.index));
+  const r2 = Math.abs(radiusFromPower(F2, lens.index));
+
+  const semi = lens.diameter / 2;
+  const s1 = sagitta(r1, semi);
+  const s2 = sagitta(r2, semi);
+
+  // Provisional edge thickness using minimum centre thickness and the
+  // surface-sagitta difference.  The sign depends on which surface is
+  // more curved in this meridian.
+  const provisionalCenter = lens.minCenterThickness;
+  // ΔSag positive when the back is more curved (s2 > s1) — minus power case.
+  const deltaSag = s2 - s1;
+  const provisionalEdge = provisionalCenter + deltaSag;
+
+  return {
+    power: F,
+    axis: thetaDeg,
+    frontPower: F1,
+    backPower: F2,
+    frontRadius: r1,
+    backRadius: r2,
+    frontSag: s1,
+    backSag: s2,
+    edgeThickness: provisionalEdge,
+  };
 }
 
-/**
- * Surface radius from surface power.
- *   F = (n − n₀) / r            (r in metres)
- *   r[mm] = 1000 · (n − 1) / F
- *
- * Returns a large radius (≈ flat) when |F| is tiny.
- */
-export function radiusFromPower(power: number, index: number): number {
-  if (Math.abs(power) < 1e-3) return 1e9;
-  return (1000 * (index - 1)) / power;
+// ----- ANSI minimum enforcement ---------------------------------------
+
+function applyAnsi(lens: LensData, F_se: number): { ctMin: number; etMin: number; check: AnsiCheck } {
+  const ctMin = Math.max(lens.minCenterThickness, ansiCenterMin(lens.material, F_se));
+  const etMin = Math.max(lens.minEdgeThickness, ansiEdgeMin(lens.material, F_se));
+  return {
+    ctMin,
+    etMin,
+    check: {
+      centerOk: lens.minCenterThickness >= ansiCenterMin(lens.material, F_se),
+      edgeOk: lens.minEdgeThickness >= ansiEdgeMin(lens.material, F_se),
+      ansiCenterMin: ansiCenterMin(lens.material, F_se),
+      ansiEdgeMin: ansiEdgeMin(lens.material, F_se),
+      standard: 'Z80.1-dress',
+    },
+  };
 }
 
-// ----- Base curve recommendation --------------------------------------
-
-/**
- * Vogel's rule of thumb for recommended front (base) curve:
- *   • Plus lenses:  base = sphere + 6
- *   • Minus lenses: base = sphere/2 + 6
- * Clamped to a sensible range [0.5 D, 10 D].
- */
-export function recommendBaseCurve(sphere: number): number {
-  const raw = sphere >= 0 ? sphere + 6 : sphere / 2 + 6;
-  return Math.min(10, Math.max(0.5, raw));
-}
-
-// ----- Effective decentration ----------------------------------------
-
-/**
- * Effective decentration = how far the optical centre sits from the
- * geometric centre of the boxed lens shape.
- *   dec = (frame.A + frame.DBL)/2 − monocularPD
- * The result drives the worst-case edge thickness on the wider side.
- */
-export function effectiveDecentration(frame: FrameData): number {
-  const geometricCenter = (frame.aSize + frame.dbl) / 2;
-  return Math.abs(geometricCenter - frame.monocularPD);
-}
-
-// ----- Minimum required uncut diameter (MBS) --------------------------
-
-/**
- * Minimum Blank Size required to fully cover the frame when decentred.
- *   MBS = ED + 2·|decentration| + tolerance
- */
-export function minimumBlankSize(frame: FrameData, decentration: number): number {
-  const tolerance = 2; // mm safety margin
-  return frame.ed + 2 * decentration + tolerance;
-}
-
-// ----- Core thickness calculation -------------------------------------
+// ----- Worst-meridian helper ------------------------------------------
 
 interface CoreThickness {
   centerThickness: number;
-  edgeThickness: number;
+  edgeMaxUncut: number;
+  edgeMinUncut: number;
   baseCurve: number;
+  meridians: MeridianResult[];
+  worstMeridian: MeridianResult;
+  bestMeridian: MeridianResult;
+  ansi: AnsiCheck;
+  ctMinApplied: number;
+  etMinApplied: number;
 }
 
 /**
- * Compute centre & edge thickness for an uncut round lens.
+ * Compute centre & per-meridian edge thicknesses for an uncut round
+ * lens, with ANSI safety minima applied.
  *
- * Geometric model (single-vision, sphero-cylindrical, thin-lens):
- *   1. Power in the strongest meridian:
- *        F_max = sphere + (cylinder if cyl<0 else 0) for minus convention
- *      Here we use the worst-case meridian for edge of minus lenses
- *      and the central meridian for centre of plus lenses.
- *   2. Choose a recommended base curve F1 (Vogel).
- *   3. Back curve F2 = F_total − F1.
- *   4. Surface radii from radiusFromPower(F, n).
- *   5. Sagittas on each surface for the lens semi-diameter.
- *   6. For PLUS lenses (converging): centre is thicker.
- *        centerThickness = minEdgeThickness + s1 − s2
- *        edgeThickness   = minEdgeThickness
- *   7. For MINUS lenses (diverging): edge is thicker.
- *        edgeThickness   = minCenterThickness + s2 − s1
- *        centerThickness = minCenterThickness
- *   8. Apply minimum constraints from manufacturer data.
+ * The two principal meridians are:
+ *   • along the cylinder axis (F = sphere)
+ *   • perpendicular to it      (F = sphere + cylinder)
  *
- * Cylinder is included by considering the most powerful meridian
- * in the worst direction (edge thickness of minus = strongest minus).
+ * For both we compute the back-surface power F2 = F − F1 (base curve)
+ * and use sagitta differences to derive the edge thickness assuming a
+ * common centre thickness.  The maximum and minimum edges around the
+ * blank circle are then the meridian extremes.
  */
 export function calculateThickness(lens: LensData): CoreThickness {
-  const { sphere, cylinder, index, diameter, minCenterThickness, minEdgeThickness } = lens;
+  const F_se = sphericalEquivalent(lens.sphere, lens.cylinder);
+  const isPlus = F_se >= 0;
 
-  // Worst-case meridian power (most negative or most positive).
-  // For minus lenses, worst meridian is sphere + cyl (cyl is typically negative).
-  // For plus lenses, the strongest plus is sphere when cyl is negative.
-  const meridian1 = sphere;
-  const meridian2 = sphere + cylinder;
-  const isPlus = sphere + cylinder / 2 >= 0;
-  const worstPower = isPlus
-    ? Math.max(meridian1, meridian2)
-    : Math.min(meridian1, meridian2);
+  const baseCurve = suggestBase(lens.sphere, lens.material, lens.type);
 
-  const baseCurve = recommendBaseCurve(sphere);
-  const backPower = worstPower - baseCurve; // total = front + back
+  const m1 = computeMeridian(lens, baseCurve, lens.axis, lens.axis);
+  const m2 = computeMeridian(lens, baseCurve, lens.axis, lens.axis + 90);
+  const meridians: MeridianResult[] = [m1, m2];
 
-  const r1 = radiusFromPower(baseCurve, index);
-  const r2 = radiusFromPower(backPower, index);
+  // ANSI minima
+  const { ctMin, etMin, check } = applyAnsi(lens, F_se);
 
-  const semi = diameter / 2;
-  const s1 = sagitta(Math.abs(r1), semi); // front sag (always positive for convex)
-  const s2 = sagitta(Math.abs(r2), semi); // back sag
-
+  // Establish a reference centre thickness, then re-derive each
+  // meridian's edge from sagitta differences.
   let centerThickness: number;
-  let edgeThickness: number;
+  let edges: number[];
 
   if (isPlus) {
-    // Plus lens: edge is the manufacturer minimum, centre = minEdge + (s1 − s2)
-    edgeThickness = minEdgeThickness;
-    centerThickness = Math.max(minCenterThickness, edgeThickness + (s1 - s2));
+    // Plus: the EDGE is set by the manufacturer minimum (etMin).
+    // CT = etMin + max(s1 − s2) over meridians  (largest "bulge").
+    const ctCandidates = meridians.map((m) => etMin + (m.frontSag - m.backSag));
+    centerThickness = Math.max(ctMin, ...ctCandidates);
+    // Each meridian's edge then derives from this CT:
+    edges = meridians.map((m) => Math.max(etMin, centerThickness - (m.frontSag - m.backSag)));
   } else {
-    // Minus lens: centre is the manufacturer minimum, edge = minCenter + (s2 − s1)
-    centerThickness = minCenterThickness;
-    edgeThickness = Math.max(minEdgeThickness, centerThickness + (s2 - s1));
+    // Minus: the CENTRE is set by ctMin.
+    centerThickness = ctMin;
+    // Each meridian's edge:
+    edges = meridians.map((m) => Math.max(etMin, centerThickness + (m.backSag - m.frontSag)));
   }
+
+  // Update the meridian objects with their final edge values.
+  meridians.forEach((m, i) => (m.edgeThickness = edges[i]));
+
+  const edgeMaxUncut = Math.max(...edges);
+  const edgeMinUncut = Math.min(...edges);
+
+  const worstMeridian = edges[0] >= edges[1] ? m1 : m2;
+  const bestMeridian = edges[0] < edges[1] ? m1 : m2;
 
   return {
     centerThickness,
-    edgeThickness,
+    edgeMaxUncut,
+    edgeMinUncut,
     baseCurve,
+    meridians,
+    worstMeridian,
+    bestMeridian,
+    ansi: check,
+    ctMinApplied: ctMin,
+    etMinApplied: etMin,
   };
 }
 
 // ----- Final thickness after edging -----------------------------------
 
 /**
- * After edging the round lens to the frame shape, only material within
- * the frame outline survives. The edge thickness at the worst meridian
- * is reduced because the cut diameter (≈ frame ED + 2·dec) is smaller
- * than the uncut blank.
- *
- * We re-run the sagitta computation using the effective cut diameter
- * to estimate the final edge thickness on the wider side.
+ * Recompute the worst-meridian edge thickness on the cut diameter
+ * (frame ED inflated by twice the decentration).  The OC stays at the
+ * cut centre, so the centre thickness is preserved unless prism
+ * thinning later applies.
  */
 export function finalEdgedThickness(
   lens: LensData,
   frame: FrameData,
-  core: CoreThickness
+  core: CoreThickness,
+  decTotal: number
 ): { finalCenter: number; finalEdge: number } {
-  const dec = effectiveDecentration(frame);
-  // Worst-side cut diameter — the side opposite to where the optical
-  // centre is shifted. Approximate as ED + 2·dec.
-  const cutDiameter = Math.min(lens.diameter, frame.ed + 2 * dec);
-  const semi = cutDiameter / 2;
+  const cutD = Math.min(lens.diameter, worstSideCutDiameter(frame, decTotal));
+  const semi = cutD / 2;
 
-  const sphere = lens.sphere;
-  const cyl = lens.cylinder;
-  const isPlus = sphere + cyl / 2 >= 0;
-  const worstPower = isPlus ? Math.max(sphere, sphere + cyl) : Math.min(sphere, sphere + cyl);
+  const F_se = sphericalEquivalent(lens.sphere, lens.cylinder);
+  const isPlus = F_se >= 0;
 
-  const baseCurve = core.baseCurve;
-  const backPower = worstPower - baseCurve;
+  const m = core.worstMeridian;
+  const r1 = Math.abs(radiusFromPower(m.frontPower, lens.index));
+  const r2 = Math.abs(radiusFromPower(m.backPower, lens.index));
 
-  const r1 = radiusFromPower(baseCurve, lens.index);
-  const r2 = radiusFromPower(backPower, lens.index);
+  const s1 = sagitta(r1, semi);
+  const s2 = sagitta(r2, semi);
 
-  const s1 = sagitta(Math.abs(r1), semi);
-  const s2 = sagitta(Math.abs(r2), semi);
-
-  let finalCenter = core.centerThickness;
-  let finalEdge = core.edgeThickness;
-
+  let finalEdge: number;
   if (isPlus) {
-    finalEdge = Math.max(lens.minEdgeThickness, core.centerThickness - (s1 - s2));
+    finalEdge = Math.max(core.etMinApplied, core.centerThickness - (s1 - s2));
   } else {
-    finalEdge = Math.max(lens.minEdgeThickness, core.centerThickness + (s2 - s1));
+    finalEdge = Math.max(core.etMinApplied, core.centerThickness + (s2 - s1));
   }
 
-  return { finalCenter, finalEdge };
+  return { finalCenter: core.centerThickness, finalEdge };
 }
 
 // ----- Weight estimation ----------------------------------------------
 
 /**
- * Approximate weight of a finished lens shape.
- * Treat the edged lens as a cylinder of effective diameter D_eff
- * and average thickness t_avg.
+ * Approximate weight of the finished (cut) lens.
  *
- *   V[cm³] = π · (D_eff/2)² · t_avg / 1000
- *   m[g]   = V · ρ
+ * The cut shape is approximated as an ellipse of axes (A, B) inflated
+ * by 2 mm to account for bevel/groove allowance.  Average thickness is
+ * the mean of centre and worst edge:
+ *
+ *     V[cm³] = π · (A/2 · B/2) · t_avg / 1000
+ *     m[g]   = V · ρ
  */
 export function estimateWeight(
   lens: LensData,
@@ -227,30 +251,37 @@ export function estimateWeight(
   edgeT: number
 ): number {
   const tAvgMm = (centerT + edgeT) / 2;
-  const dEffMm = Math.min(lens.diameter, (frame.aSize + frame.bSize) / 2 + 4);
-  const rCm = dEffMm / 20; // mm → cm, divide by 2
+  const aMm = Math.min(lens.diameter, frame.aSize) + 2;
+  const bMm = Math.min(lens.diameter, frame.bSize) + 2;
+  const aCm = aMm / 20; // mm → cm, divide by 2 for radius
+  const bCm = bMm / 20;
   const tCm = tAvgMm / 10;
-  const volumeCm3 = Math.PI * rCm * rCm * tCm;
-  const density = DENSITY_BY_INDEX[lens.index] ?? 1.3;
+  const volumeCm3 = Math.PI * aCm * bCm * tCm;
+  const density = MATERIALS[lens.material]?.density ?? DENSITY_BY_INDEX[lens.index] ?? 1.3;
   return volumeCm3 * density;
 }
 
-// ----- Index comparison & optimal selector ----------------------------
+// ----- Index comparison -----------------------------------------------
 
 /**
  * Recompute thickness for every available index and return a
- * comparison table. The "optimal" index is chosen as the lowest
- * index whose final edge thickness is below 4 mm — a comfort target
- * commonly used in optical labs.
+ * comparison table.
+ *
+ * The "optimal" index is the lowest n meeting:
+ *   • final edge ≤ 4 mm comfort target
+ *   • MBS satisfied with the requested uncut diameter
+ *
+ * If none satisfy the comfort target, the thinnest-edge variant wins.
  */
-export function compareIndices(lens: LensData, frame: FrameData): {
-  comparison: IndexComparison[];
-  optimalIndex: RefractiveIndex;
-} {
+export function compareIndices(
+  lens: LensData,
+  frame: FrameData,
+  decTotal: number
+): { comparison: IndexComparison[]; optimalIndex: RefractiveIndex } {
   const comparison: IndexComparison[] = AVAILABLE_INDICES.map((idx) => {
     const variant: LensData = { ...lens, index: idx };
     const core = calculateThickness(variant);
-    const { finalEdge } = finalEdgedThickness(variant, frame, core);
+    const { finalEdge } = finalEdgedThickness(variant, frame, core, decTotal);
     const weight = estimateWeight(variant, frame, core.centerThickness, finalEdge);
     return {
       index: idx,
@@ -260,38 +291,57 @@ export function compareIndices(lens: LensData, frame: FrameData): {
     };
   });
 
-  // Optimal = lowest index meeting the comfort target, else thinnest.
   const COMFORT_EDGE = 4.0;
   const acceptable = comparison.filter((c) => c.edgeThickness <= COMFORT_EDGE);
-  const optimal = (acceptable.length > 0
-    ? acceptable[0]
-    : comparison.reduce((best, c) => (c.edgeThickness < best.edgeThickness ? c : best))
-  );
+  const optimal =
+    acceptable.length > 0
+      ? acceptable[0]
+      : comparison.reduce((best, c) =>
+          c.edgeThickness < best.edgeThickness ? c : best
+        );
 
   return { comparison, optimalIndex: optimal.index };
 }
 
-// ----- Warnings -------------------------------------------------------
+// ----- Diagnostics ----------------------------------------------------
 
 function buildWarnings(
   lens: LensData,
   frame: FrameData,
   finalEdge: number,
-  finalCenter: number
+  finalCenter: number,
+  blank: BlankAnalysis,
+  ansi: AnsiCheck,
+  prismThinningApplied: boolean
 ): Warning[] {
   const out: Warning[] = [];
-  const dec = effectiveDecentration(frame);
 
-  // Lens diameter vs minimum blank size
-  const mbs = minimumBlankSize(frame, dec);
-  if (lens.diameter < mbs) {
+  // MBS check
+  if (!blank.fits) {
     out.push({
       severity: 'error',
-      code: 'BLANK_TOO_SMALL',
-      message: `Lens diameter ${lens.diameter.toFixed(0)} mm is below the minimum blank size ${mbs.toFixed(0)} mm required by this frame.`,
+      code: 'MBS_FAILED',
+      message: `Lens diameter ${lens.diameter.toFixed(0)} mm is below the minimum blank size ${blank.minimumBlankSize.toFixed(0)} mm. Increase Ø or reduce decentration.`,
     });
   }
 
+  // ANSI checks
+  if (!ansi.centerOk) {
+    out.push({
+      severity: 'warning',
+      code: 'ANSI_CT_VIOLATION',
+      message: `Configured min. centre ${lens.minCenterThickness.toFixed(2)} mm is below ANSI Z80.1 ${ansi.ansiCenterMin.toFixed(2)} mm for ${lens.material}.`,
+    });
+  }
+  if (!ansi.edgeOk) {
+    out.push({
+      severity: 'warning',
+      code: 'ANSI_ET_VIOLATION',
+      message: `Configured min. edge ${lens.minEdgeThickness.toFixed(2)} mm is below ANSI Z80.1 ${ansi.ansiEdgeMin.toFixed(2)} mm for ${lens.material}.`,
+    });
+  }
+
+  // Edge / centre comfort
   if (finalEdge > 6) {
     out.push({
       severity: 'warning',
@@ -305,31 +355,29 @@ function buildWarnings(
       message: `Edge thickness ${finalEdge.toFixed(2)} mm is acceptable but a higher index could improve cosmetics.`,
     });
   }
-
   if (finalCenter > 6) {
     out.push({
       severity: 'warning',
       code: 'THICK_CENTER',
-      message: `Centre thickness ${finalCenter.toFixed(2)} mm is high — typical for strong plus prescriptions.`,
+      message: `Centre thickness ${finalCenter.toFixed(2)} mm is high — common for strong plus prescriptions. Prism thinning ${prismThinningApplied ? 'has been applied' : 'recommended'}.`,
     });
   }
 
+  // Frame / material brittleness
   if (frame.type === 'rimless' && lens.index >= 1.67) {
     out.push({
       severity: 'info',
       code: 'RIMLESS_BRITTLE',
-      message: 'High-index materials (≥ 1.67) can be brittle for drilled rimless mounts. Prefer MR8 or polycarbonate.',
+      message: 'High-index materials (≥ 1.67) can be brittle for drilled rimless mounts. Prefer MR-8 or polycarbonate.',
     });
   }
-
   if (frame.type === 'semi-rimless' && Math.abs(lens.sphere) >= 4) {
     out.push({
       severity: 'info',
       code: 'GROOVE_THIN',
-      message: 'For nylon-grooved frames, a minimum edge thickness ≥ 2.0 mm is recommended.',
+      message: 'Nylon-grooved mounts require ≥ 2.0 mm edge thickness on the groove side.',
     });
   }
-
   if (Math.abs(lens.sphere) >= 6 && lens.index <= 1.5) {
     out.push({
       severity: 'warning',
@@ -337,13 +385,29 @@ function buildWarnings(
       message: 'Strong prescription with low index will produce visibly thick lenses.',
     });
   }
-
-  // Frame size sanity
   if (frame.aSize > 58 && lens.sphere <= -4) {
     out.push({
       severity: 'warning',
       code: 'FRAME_TOO_LARGE',
       message: 'Large frame combined with strong minus power increases edge thickness considerably.',
+    });
+  }
+
+  // Decentration
+  if (Math.abs(blank.effectiveDecentrationH) > 5 || Math.abs(blank.effectiveDecentrationV) > 5) {
+    out.push({
+      severity: 'info',
+      code: 'HIGH_DECENTRATION',
+      message: `High decentration detected (H ${blank.effectiveDecentrationH.toFixed(1)} mm, V ${blank.effectiveDecentrationV.toFixed(1)} mm).`,
+    });
+  }
+
+  // Prism thinning info
+  if (prismThinningApplied) {
+    out.push({
+      severity: 'info',
+      code: 'PRISM_THINNING',
+      message: 'Prism thinning has been applied to redistribute centre thickness.',
     });
   }
 
@@ -353,19 +417,68 @@ function buildWarnings(
 // ----- Top-level orchestrator -----------------------------------------
 
 export function runSimulation(lens: LensData, frame: FrameData): ThicknessResult {
+  const dec = computeDecentration(frame);
+
   const core = calculateThickness(lens);
-  const { finalCenter, finalEdge } = finalEdgedThickness(lens, frame, core);
+  const { finalCenter: fCenterRaw, finalEdge: fEdgeRaw } = finalEdgedThickness(
+    lens,
+    frame,
+    core,
+    dec.magnitude
+  );
+
+  // Prism thinning (acts on plus/high-plus only)
+  const prism = computePrismThinning(lens, core.worstMeridian.power);
+  // Apply: top-edge thickness reduced by full reduction; centre by ⅓.
+  const reduction = prism.applied ? prism.thicknessReductionMm : 0;
+  const finalEdge = Math.max(core.etMinApplied, fEdgeRaw - reduction);
+  const finalCenter = Math.max(core.ctMinApplied, fCenterRaw - reduction / 3);
+
   const weight = estimateWeight(lens, frame, finalCenter, finalEdge);
-  const { comparison, optimalIndex } = compareIndices(lens, frame);
-  const warnings = buildWarnings(lens, frame, finalEdge, finalCenter);
+
+  // Blank analysis
+  const mbs = minimumBlankSize(frame, dec.magnitude);
+  const blank: BlankAnalysis = {
+    minimumBlankSize: mbs,
+    effectiveDecentrationH: dec.horizontal,
+    effectiveDecentrationV: dec.vertical,
+    totalDecentration: dec.magnitude,
+    uncutDiameterUsed: lens.diameter,
+    cutDiameterWorstSide: worstSideCutDiameter(frame, dec.magnitude),
+    fits: blankFits(lens.diameter, mbs),
+  };
+
+  // Index comparison
+  const { comparison, optimalIndex } = compareIndices(lens, frame, dec.magnitude);
+
+  // Diagnostics
+  const warnings = buildWarnings(
+    lens,
+    frame,
+    finalEdge,
+    finalCenter,
+    blank,
+    core.ansi,
+    prism.applied
+  );
 
   return {
     centerThickness: core.centerThickness,
-    edgeThickness: core.edgeThickness,
+    edgeThickness: core.edgeMaxUncut,
     finalCenterThickness: finalCenter,
     finalEdgeThickness: finalEdge,
+    edgeThicknessMin: core.edgeMinUncut,
+    edgeThicknessMax: core.edgeMaxUncut,
+
     baseCurve: core.baseCurve,
+    backCurve: core.worstMeridian.backPower,
     weight,
+
+    meridians: core.meridians,
+    prismThinning: prism,
+    blank,
+    ansi: core.ansi,
+
     warnings,
     optimalIndex,
     comparison,

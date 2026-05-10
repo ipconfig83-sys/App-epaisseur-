@@ -50,13 +50,61 @@ export interface LensData {
   type: LensType;
 }
 
+export interface MeridianResult {
+  power: number;                 // (D)
+  axis: number;                  // (°) the axis of this meridian
+  frontPower: number;            // (D)
+  backPower: number;             // (D)
+  frontRadius: number;           // (mm)
+  backRadius: number;            // (mm)
+  frontSag: number;              // (mm)
+  backSag: number;               // (mm)
+  edgeThickness: number;         // (mm) at this meridian
+}
+
+export interface PrismThinning {
+  applied: boolean;
+  prismDiopters: number;        // Δ
+  base: 'down' | 'up' | 'none';
+  thicknessReductionMm: number; // (mm) reduction in worst edge/centre
+  rationale: string;
+}
+
+export interface BlankAnalysis {
+  minimumBlankSize: number;     // (mm)
+  effectiveDecentrationH: number; // horizontal (mm)
+  effectiveDecentrationV: number; // vertical (mm)
+  totalDecentration: number;      // |vector| (mm)
+  uncutDiameterUsed: number;      // (mm)
+  cutDiameterWorstSide: number;   // (mm)
+  fits: boolean;
+}
+
+export interface AnsiCheck {
+  centerOk: boolean;
+  edgeOk: boolean;
+  ansiCenterMin: number;        // (mm)
+  ansiEdgeMin: number;          // (mm)
+  standard: 'Z80.1-dress' | 'Z87.1-impact';
+}
+
 export interface ThicknessResult {
-  centerThickness: number;        // (mm)
-  edgeThickness: number;          // (mm)
-  finalEdgeThickness: number;     // after edging (mm)
-  finalCenterThickness: number;   // after edging (mm)
-  baseCurve: number;              // (D)
+  centerThickness: number;        // applied centre thickness after all rules (mm)
+  edgeThickness: number;          // worst-meridian uncut edge thickness (mm)
+  finalEdgeThickness: number;     // worst-meridian edge after edging (mm)
+  finalCenterThickness: number;   // centre after edging + prism thinning (mm)
+  edgeThicknessMin: number;       // best-meridian edge (thinnest side) (mm)
+  edgeThicknessMax: number;       // worst-meridian edge (mm)
+
+  baseCurve: number;              // recommended front (D)
+  backCurve: number;              // computed back (D), worst meridian
   weight: number;                 // estimated weight (g)
+
+  meridians: MeridianResult[];    // 2 entries (axis, perp)
+  prismThinning: PrismThinning;
+  blank: BlankAnalysis;
+  ansi: AnsiCheck;
+
   warnings: Warning[];
   optimalIndex: RefractiveIndex;
   comparison: IndexComparison[];
