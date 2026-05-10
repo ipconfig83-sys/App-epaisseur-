@@ -8,27 +8,36 @@ import { makeCustomCutter } from '@/utils/svgImport';
 // Procedural lens geometry
 // =====================================================================
 // Builds a closed lens mesh by sampling the front and back spherical
-// surfaces over a circular aperture. The two surfaces are stitched
-// together by a thin cylindrical band at the edge.
+// surfaces over a polar grid, stitched by an edge band.
 //
-// Coordinates: lens is centred at origin, axis along +Z.
-//   - front surface (towards viewer) uses radius r1 (base curve)
-//   - back surface uses radius r2 (computed from total power − base)
+// Conventions:
+//   - Lens centred at origin, optical axis along +Z.
+//   - Front surface (towards viewer) uses radius r1 (base curve).
+//   - Back surface uses radius r2 (computed from total power − base).
+//   - Length units are mm, scaled to scene units by `scale`.
 //
-// Length units: millimetres are scaled to scene units by `scale`.
+// Surface signs (geometric):
+//   - Plus lens (converging):  bulging front, flatter back.
+//   - Minus lens (diverging):  flatter front, deeply concave back.
+//
+// Normals are computed by THREE.computeVertexNormals() after the mesh
+// is built — this produces smooth shading that matches the geometry
+// exactly, including around the cutter-trimmed edge.
 // =====================================================================
 
 interface LensGeometryOptions {
   segments?: number;
-  scale?: number;       // mm → scene units
-  shapeCutter?: (xMm: number, yMm: number) => boolean; // returns true if (x,y) is inside the cut shape
+  rings?: number;
+  scale?: number;
+  shapeCutter?: (xMm: number, yMm: number) => boolean;
 }
 
 export function buildLensGeometry(
   lens: LensData,
   options: LensGeometryOptions = {}
 ): THREE.BufferGeometry {
-  const segments = options.segments ?? 96;
+  const segments = options.segments ?? 120;
+  const rings = options.rings ?? 48;
   const scale = options.scale ?? 0.04;
   const cutter = options.shapeCutter;
 
@@ -44,73 +53,57 @@ export function buildLensGeometry(
   const sFront = sagitta(r1, radiusMm);
   const sBack = sagitta(r2, radiusMm);
 
-  // Place the lens so the "thinnest" part sits centred on z=0.
+  // Centre the lens vertically: thinnest section sits at z = 0 plane.
   const minThickness = isPlus ? lens.minEdgeThickness : lens.minCenterThickness;
-
-  // Front surface z: convex side towards viewer (+z bulge for plus).
-  // For a converging (plus) lens, front sag adds to centre thickness.
-  // For a diverging (minus) lens, back sag adds to edge thickness.
-  const centerOffset = (isPlus ? sFront - sBack : sBack - sFront);
+  const centerOffset = isPlus ? sFront - sBack : sBack - sFront;
   const halfThickness = (minThickness + Math.abs(centerOffset)) / 2;
 
+  // ---------- Vertex generation ----------
   const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
   const uvs: number[] = [];
 
-  // Build a polar grid (rings × segments) for both faces.
-  const rings = 32;
-
-  // Index helpers
-  const frontStart = 0;
-  const backStart = (rings + 1) * (segments + 1);
-
-  // Helper that maps (ring, seg) to (x, y) and tells if the vertex is inside the shape.
-  function vertexAt(ring: number, seg: number) {
+  const vertexAt = (ring: number, seg: number) => {
     const t = ring / rings;
     const ang = (seg / segments) * Math.PI * 2;
     const r = radiusMm * t;
-    const x = Math.cos(ang) * r;
-    const y = Math.sin(ang) * r;
-    return { x, y, ang, r };
-  }
+    return { x: Math.cos(ang) * r, y: Math.sin(ang) * r, r };
+  };
 
-  // FRONT surface
+  // Z value of the front-surface at radius r (centred lens).
+  const zFront = (r: number) => {
+    const sag = sagitta(r1, r);
+    return isPlus ? halfThickness + (sFront - sag) : halfThickness - sag * 0.35;
+  };
+  // Z value of the back-surface at radius r.
+  const zBack = (r: number) => {
+    const sag = sagitta(r2, r);
+    return isPlus ? -halfThickness + sag * 0.35 : -halfThickness - (sBack - sag);
+  };
+
+  // Front
+  const frontStart = 0;
   for (let ring = 0; ring <= rings; ring++) {
     for (let seg = 0; seg <= segments; seg++) {
       const { x, y, r } = vertexAt(ring, seg);
-      const sag = sagitta(r1, r);
-      const z = halfThickness + (isPlus ? (sFront - sag) : -sag * 0.4);
-      positions.push(x * scale, y * scale, z * scale);
-
-      // Approximate normal pointing along (x, y, slope_z)
-      const slope = r / Math.sqrt(Math.max(r1 * r1 - r * r, 1e-3));
-      const nx = (x / Math.max(r, 1e-3)) * slope;
-      const ny = (y / Math.max(r, 1e-3)) * slope;
-      const n = new THREE.Vector3(nx, ny, 1).normalize();
-      normals.push(n.x, n.y, n.z);
+      positions.push(x * scale, y * scale, zFront(r) * scale);
       uvs.push(seg / segments, ring / rings);
     }
   }
 
-  // BACK surface
+  // Back
+  const backStart = positions.length / 3;
   for (let ring = 0; ring <= rings; ring++) {
     for (let seg = 0; seg <= segments; seg++) {
       const { x, y, r } = vertexAt(ring, seg);
-      const sag = sagitta(r2, r);
-      const z = -halfThickness - (isPlus ? -sag * 0.4 : (sBack - sag));
-      positions.push(x * scale, y * scale, z * scale);
-
-      const slope = r / Math.sqrt(Math.max(r2 * r2 - r * r, 1e-3));
-      const nx = -(x / Math.max(r, 1e-3)) * slope;
-      const ny = -(y / Math.max(r, 1e-3)) * slope;
-      const n = new THREE.Vector3(nx, ny, -1).normalize();
-      normals.push(n.x, n.y, n.z);
+      positions.push(x * scale, y * scale, zBack(r) * scale);
       uvs.push(seg / segments, ring / rings);
     }
   }
 
-  // Faces — front
+  // ---------- Triangulation ----------
+  const indices: number[] = [];
+
+  // Front faces
   for (let ring = 0; ring < rings; ring++) {
     for (let seg = 0; seg < segments; seg++) {
       const a = frontStart + ring * (segments + 1) + seg;
@@ -120,7 +113,7 @@ export function buildLensGeometry(
       indices.push(a, c, b, b, c, d);
     }
   }
-  // Faces — back (flipped winding)
+  // Back faces (reverse winding so the outward normal points −Z)
   for (let ring = 0; ring < rings; ring++) {
     for (let seg = 0; seg < segments; seg++) {
       const a = backStart + ring * (segments + 1) + seg;
@@ -130,7 +123,7 @@ export function buildLensGeometry(
       indices.push(a, b, c, b, d, c);
     }
   }
-  // Edge band — connect outer ring of front to outer ring of back
+  // Edge band — outer ring of front to outer ring of back
   for (let seg = 0; seg < segments; seg++) {
     const f = frontStart + rings * (segments + 1) + seg;
     const fNext = f + 1;
@@ -139,7 +132,7 @@ export function buildLensGeometry(
     indices.push(f, fNext, b, fNext, bNext, b);
   }
 
-  // Optional shape cut: drop triangles whose centroid lies outside the cutter.
+  // ---------- Optional shape clip ----------
   let finalIndices = indices;
   if (cutter) {
     const filtered: number[] = [];
@@ -156,11 +149,15 @@ export function buildLensGeometry(
     finalIndices = filtered;
   }
 
+  // ---------- Assemble ----------
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geom.setIndex(finalIndices);
+
+  // Let Three compute smooth vertex normals — much more reliable than
+  // hand-rolled analytic normals, especially around the trimmed edge.
+  geom.computeVertexNormals();
   geom.computeBoundingSphere();
   return geom;
 }

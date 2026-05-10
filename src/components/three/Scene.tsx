@@ -4,6 +4,7 @@ import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, RotateCw, ZoomIn, ZoomOut, Layers } from 'lucide-react';
 import LensMesh from './LensMesh';
+import Backdrop from './Backdrop';
 import type { CustomShape, FrameData, LensData } from '@/types';
 
 interface SceneProps {
@@ -34,24 +35,29 @@ export default function Scene({ lens, frame, compareWith, customShape = null }: 
         id="presbyta-3d-canvas"
       >
         <color attach="background" args={['#050d1d']} />
-        <ambientLight intensity={0.35} />
+        <ambientLight intensity={0.55} />
         <directionalLight
           position={[3, 4, 5]}
-          intensity={1.4}
+          intensity={1.1}
           castShadow
           shadow-mapSize={[1024, 1024]}
         />
-        <directionalLight position={[-3, 2, -2]} intensity={0.7} color="#ecc154" />
+        <directionalLight position={[-3, 2, -2]} intensity={0.5} color="#ecc154" />
+        <pointLight position={[0, 1.5, 2.5]} intensity={0.4} color="#ffffff" />
 
         <Suspense fallback={null}>
-          <Environment preset="studio" />
-          <Float speed={autoRotate ? 1.2 : 0} rotationIntensity={0.4} floatIntensity={0.3}>
+          {/* Eye-chart backdrop — gives the refracting glass something
+              recognisable to bend, which is what makes a transparent
+              lens "read" as glass on screen. */}
+          <Backdrop />
+
+          <Environment preset="city" background={false} />
+          <Float speed={autoRotate ? 0.8 : 0} rotationIntensity={0.25} floatIntensity={0.2}>
             <group position={compareWith ? [-1.4, 0, 0] : [0, 0, 0]}>
               <LensMesh
                 lens={lens}
                 frame={frame}
                 cut
-                tint="#cfe2ff"
                 showWireframe={showWire}
                 customShape={customShape}
               />
@@ -62,7 +68,7 @@ export default function Scene({ lens, frame, compareWith, customShape = null }: 
                   lens={compareWith}
                   frame={frame}
                   cut
-                  tint="#fff7d6"
+                  tint="#fff8e3"
                   showWireframe={showWire}
                   customShape={customShape}
                 />
@@ -71,9 +77,9 @@ export default function Scene({ lens, frame, compareWith, customShape = null }: 
           </Float>
           <ContactShadows
             position={[0, -1.4, 0]}
-            opacity={0.4}
+            opacity={0.35}
             scale={8}
-            blur={2.4}
+            blur={2.6}
             far={3}
             color="#020a18"
           />
