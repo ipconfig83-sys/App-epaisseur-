@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: radial-gradient(circle at 0% 0%, #163461 0%, #0a1a33 45%, #050d1d 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html.light body {
+  background: radial-gradient(circle at 0% 0%, #eef4fb 0%, #f6f8fc 60%, #ffffff 100%);
+  color: #0a1a33;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(227, 168, 51, 0.35);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(227, 168, 51, 0.55);
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-glass;
+  }
+  html.light .glass-card {
+    @apply bg-white/70 border-presbyta-100 shadow-lab;
+  }
+
+  .glass-input {
+    @apply w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white
+           focus:outline-none focus:ring-2 focus:ring-gold-400/60 focus:border-gold-400/40
+           placeholder-white/30 transition;
+  }
+  html.light .glass-input {
+    @apply bg-white border-presbyta-100 text-presbyta-900 placeholder-presbyta-400;
+  }
+
+  .label {
+    @apply text-[11px] uppercase tracking-[0.16em] font-semibold text-white/60 mb-1.5 block;
+  }
+  html.light .label {
+    @apply text-presbyta-700;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 bg-gold-gradient text-presbyta-950
+           font-semibold px-4 py-2 rounded-lg shadow-gold-glow hover:shadow-gold-glow
+           hover:brightness-110 transition active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10
+           text-white/80 hover:text-white px-3 py-2 rounded-lg transition active:scale-95;
+  }
+  html.light .btn-ghost {
+    @apply bg-presbyta-50 hover:bg-presbyta-100 border-presbyta-200 text-presbyta-800;
+  }
+
+  .section-title {
+    @apply text-xs uppercase tracking-[0.22em] font-bold text-gold-300 mb-3;
+  }
+
+  .stat-value {
+    @apply font-mono text-2xl font-semibold text-white;
+  }
+  html.light .stat-value {
+    @apply text-presbyta-900;
+  }
+
+  .stat-label {
+    @apply text-[11px] uppercase tracking-wider text-white/50;
+  }
+  html.light .stat-label {
+    @apply text-presbyta-500;
+  }
+}
+
+[dir='rtl'] body {
+  font-family: 'Inter', 'Tajawal', system-ui, sans-serif;
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.0) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2.5s linear infinite;
+}
