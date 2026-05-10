@@ -6,6 +6,9 @@ dist-ssr
 .env
 .env.local
 
+# Build artifacts
+*.tsbuildinfo
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

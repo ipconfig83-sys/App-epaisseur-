@@ -15,15 +15,46 @@
 import type { LensMaterial, LensType } from '@/types';
 
 /**
- * Vogel's rule (updated):
- *   • Plus lenses:  base = sphere + 6
- *   • Minus lenses: base = sphere/2 + 6
+ * Recommend a continuous base curve before snapping.
  *
- * Then clamp to [0.5 D, 10.0 D].
+ *   • Plus lenses (Vogel):       base = sphere + 6,  capped at 10 D
+ *   • Minus lenses (lab table):  flatter bases for stronger minus, the
+ *                                cosmetic standard used by surfacing
+ *                                laboratories.  Linear ramp:
+ *
+ *        sphere ≥ −2.50 D  →  6.00 D
+ *        sphere = −4.00 D  →  4.00 D
+ *        sphere = −6.00 D  →  2.00 D
+ *        sphere = −8.00 D  →  1.00 D
+ *        sphere ≤ −10.0 D  →  0.50 D
+ *
+ *     This is closer to what real labs choose than naïve Vogel
+ *     (sphere/2 + 6), which produces visibly thicker edges for
+ *     high-minus prescriptions.
  */
 export function vogelBase(spherePower: number): number {
-  const raw = spherePower >= 0 ? spherePower + 6 : spherePower / 2 + 6;
-  return Math.min(10.0, Math.max(0.5, raw));
+  if (spherePower >= 0) {
+    return Math.min(10.0, Math.max(0.5, spherePower + 6));
+  }
+  // Minus — laboratory cosmetic table, linearly interpolated.
+  const knots: [number, number][] = [
+    [-2.5, 6.0],
+    [-4.0, 4.0],
+    [-6.0, 2.0],
+    [-8.0, 1.0],
+    [-10.0, 0.5],
+  ];
+  if (spherePower >= knots[0][0]) return knots[0][1];
+  if (spherePower <= knots[knots.length - 1][0]) return knots[knots.length - 1][1];
+  for (let i = 0; i < knots.length - 1; i++) {
+    const [s1, b1] = knots[i];
+    const [s2, b2] = knots[i + 1];
+    if (spherePower <= s1 && spherePower >= s2) {
+      const t = (spherePower - s1) / (s2 - s1);
+      return Math.max(0.5, b1 + t * (b2 - b1));
+    }
+  }
+  return 0.5;
 }
 
 /**

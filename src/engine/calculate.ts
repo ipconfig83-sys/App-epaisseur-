@@ -60,7 +60,8 @@ function computeMeridian(
   lens: LensData,
   baseCurveD: number,
   axisDeg: number,
-  thetaDeg: number
+  thetaDeg: number,
+  designSemiMm: number
 ): MeridianResult {
   const F = meridianPower(lens.sphere, lens.cylinder, axisDeg, thetaDeg);
   const F1 = baseCurveD;
@@ -69,18 +70,11 @@ function computeMeridian(
   const r1 = Math.abs(radiusFromPower(F1, lens.index));
   const r2 = Math.abs(radiusFromPower(F2, lens.index));
 
-  const semi = lens.diameter / 2;
-  const s1 = sagitta(r1, semi);
-  const s2 = sagitta(r2, semi);
+  const s1 = sagitta(r1, designSemiMm);
+  const s2 = sagitta(r2, designSemiMm);
 
-  // Provisional edge thickness using minimum centre thickness and the
-  // surface-sagitta difference.  The sign depends on which surface is
-  // more curved in this meridian.
-  const provisionalCenter = lens.minCenterThickness;
-  // ΔSag positive when the back is more curved (s2 > s1) — minus power case.
-  const deltaSag = s2 - s1;
-  const provisionalEdge = provisionalCenter + deltaSag;
-
+  // Provisional edge thickness — finalised by calculateThickness once
+  // we know whether the lens is plus or minus.
   return {
     power: F,
     axis: thetaDeg,
@@ -90,7 +84,7 @@ function computeMeridian(
     backRadius: r2,
     frontSag: s1,
     backSag: s2,
-    edgeThickness: provisionalEdge,
+    edgeThickness: 0,
   };
 }
 
@@ -128,26 +122,40 @@ interface CoreThickness {
 }
 
 /**
- * Compute centre & per-meridian edge thicknesses for an uncut round
- * lens, with ANSI safety minima applied.
+ * Compute centre & per-meridian edge thicknesses with ANSI safety
+ * minima applied.
  *
- * The two principal meridians are:
+ * `designDiameterMm` is the chord at which the etMin / sagitta
+ * relationship is enforced.  Real laboratories solve the geometry at
+ * the FRAME edge (i.e. the cut diameter) — material outside the
+ * frame is wasted, so it has no bearing on centre thickness.  The
+ * caller therefore passes:
+ *
+ *     designDiameter = min(blankDiameter, frame.ED + 2·decentration)
+ *
+ * The two principal meridians are evaluated:
  *   • along the cylinder axis (F = sphere)
  *   • perpendicular to it      (F = sphere + cylinder)
  *
- * For both we compute the back-surface power F2 = F − F1 (base curve)
- * and use sagitta differences to derive the edge thickness assuming a
- * common centre thickness.  The maximum and minimum edges around the
- * blank circle are then the meridian extremes.
+ * F2 = F − F1, sagittas at designSemi, then plus / minus rules.
  */
-export function calculateThickness(lens: LensData): CoreThickness {
+export function calculateThickness(
+  lens: LensData,
+  opts: { designDiameterMm?: number } = {}
+): CoreThickness {
+  const designDiameter = Math.max(
+    1,
+    Math.min(lens.diameter, opts.designDiameterMm ?? lens.diameter)
+  );
+  const designSemi = designDiameter / 2;
+
   const F_se = sphericalEquivalent(lens.sphere, lens.cylinder);
   const isPlus = F_se >= 0;
 
   const baseCurve = suggestBase(lens.sphere, lens.material, lens.type);
 
-  const m1 = computeMeridian(lens, baseCurve, lens.axis, lens.axis);
-  const m2 = computeMeridian(lens, baseCurve, lens.axis, lens.axis + 90);
+  const m1 = computeMeridian(lens, baseCurve, lens.axis, lens.axis, designSemi);
+  const m2 = computeMeridian(lens, baseCurve, lens.axis, lens.axis + 90, designSemi);
   const meridians: MeridianResult[] = [m1, m2];
 
   // ANSI minima
@@ -159,20 +167,22 @@ export function calculateThickness(lens: LensData): CoreThickness {
   let edges: number[];
 
   if (isPlus) {
-    // Plus: the EDGE is set by the manufacturer minimum (etMin).
+    // Plus: the EDGE at the design (frame) chord is set by etMin.
     // CT = etMin + max(s1 − s2) over meridians  (largest "bulge").
     const ctCandidates = meridians.map((m) => etMin + (m.frontSag - m.backSag));
     centerThickness = Math.max(ctMin, ...ctCandidates);
-    // Each meridian's edge then derives from this CT:
-    edges = meridians.map((m) => Math.max(etMin, centerThickness - (m.frontSag - m.backSag)));
+    edges = meridians.map((m) =>
+      Math.max(etMin, centerThickness - (m.frontSag - m.backSag))
+    );
   } else {
-    // Minus: the CENTRE is set by ctMin.
+    // Minus: the CENTRE is set by ctMin.  Edge at the design chord
+    // grows with the back-surface curvature.
     centerThickness = ctMin;
-    // Each meridian's edge:
-    edges = meridians.map((m) => Math.max(etMin, centerThickness + (m.backSag - m.frontSag)));
+    edges = meridians.map((m) =>
+      Math.max(etMin, centerThickness + (m.backSag - m.frontSag))
+    );
   }
 
-  // Update the meridian objects with their final edge values.
   meridians.forEach((m, i) => (m.edgeThickness = edges[i]));
 
   const edgeMaxUncut = Math.max(...edges);
@@ -198,38 +208,22 @@ export function calculateThickness(lens: LensData): CoreThickness {
 // ----- Final thickness after edging -----------------------------------
 
 /**
- * Recompute the worst-meridian edge thickness on the cut diameter
- * (frame ED inflated by twice the decentration).  The OC stays at the
- * cut centre, so the centre thickness is preserved unless prism
- * thinning later applies.
+ * Final centre/edge thicknesses at the frame edge.  Because the core
+ * solver already operates on the design (cut) diameter, this function
+ * is now a thin wrapper that returns the same numbers — kept for
+ * backward-compatibility and as a clear extension point if more
+ * post-edging effects are added (chip allowance, bevel placement).
  */
 export function finalEdgedThickness(
-  lens: LensData,
-  frame: FrameData,
+  _lens: LensData,
+  _frame: FrameData,
   core: CoreThickness,
-  decTotal: number
+  _decTotal: number
 ): { finalCenter: number; finalEdge: number } {
-  const cutD = Math.min(lens.diameter, worstSideCutDiameter(frame, decTotal));
-  const semi = cutD / 2;
-
-  const F_se = sphericalEquivalent(lens.sphere, lens.cylinder);
-  const isPlus = F_se >= 0;
-
-  const m = core.worstMeridian;
-  const r1 = Math.abs(radiusFromPower(m.frontPower, lens.index));
-  const r2 = Math.abs(radiusFromPower(m.backPower, lens.index));
-
-  const s1 = sagitta(r1, semi);
-  const s2 = sagitta(r2, semi);
-
-  let finalEdge: number;
-  if (isPlus) {
-    finalEdge = Math.max(core.etMinApplied, core.centerThickness - (s1 - s2));
-  } else {
-    finalEdge = Math.max(core.etMinApplied, core.centerThickness + (s2 - s1));
-  }
-
-  return { finalCenter: core.centerThickness, finalEdge };
+  return {
+    finalCenter: core.centerThickness,
+    finalEdge: core.edgeMaxUncut,
+  };
 }
 
 // ----- Weight estimation ----------------------------------------------
@@ -278,10 +272,12 @@ export function compareIndices(
   frame: FrameData,
   decTotal: number
 ): { comparison: IndexComparison[]; optimalIndex: RefractiveIndex } {
+  const cutD = worstSideCutDiameter(frame, decTotal);
+  const designD = Math.min(lens.diameter, cutD);
   const comparison: IndexComparison[] = AVAILABLE_INDICES.map((idx) => {
     const variant: LensData = { ...lens, index: idx };
-    const core = calculateThickness(variant);
-    const { finalEdge } = finalEdgedThickness(variant, frame, core, decTotal);
+    const core = calculateThickness(variant, { designDiameterMm: designD });
+    const finalEdge = core.edgeMaxUncut;
     const weight = estimateWeight(variant, frame, core.centerThickness, finalEdge);
     return {
       index: idx,
@@ -454,13 +450,15 @@ function buildWarnings(
 export function runSimulation(lens: LensData, frame: FrameData): ThicknessResult {
   const dec = computeDecentration(frame);
 
-  const core = calculateThickness(lens);
-  const { finalCenter: fCenterRaw, finalEdge: fEdgeRaw } = finalEdgedThickness(
-    lens,
-    frame,
-    core,
-    dec.magnitude
-  );
+  // Solve the geometry at the frame's effective (cut) chord — the
+  // chord at which etMin must hold and where the patient sees the
+  // lens edge after edging.  Material outside this chord is wasted.
+  const cutD = worstSideCutDiameter(frame, dec.magnitude);
+  const designD = Math.min(lens.diameter, cutD);
+
+  const core = calculateThickness(lens, { designDiameterMm: designD });
+  const fCenterRaw = core.centerThickness;
+  const fEdgeRaw = core.edgeMaxUncut;
 
   // Prism thinning (acts on plus/high-plus only)
   const prism = computePrismThinning(lens, core.worstMeridian.power);
