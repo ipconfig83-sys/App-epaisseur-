@@ -101,9 +101,15 @@ All formulas are documented inline in `src/engine/calculate.ts`.
 **PRESBYTA** is a professional ophthalmic lens brand owned by
 **Lunette 15 Minutes**, specialised in premium lens optimisation for
 opticians and optical laboratories. The simulator presented here is
-the public interface of PRESBYTA's in-house dispensing intelligence
-suite. The included logo is a placeholder SVG that can be replaced
-with the official brand assets.
+the public interface of PRESBYTA's dispensing intelligence suite,
+covering the full PRESBYTA lens catalogue (1.56 SHMC, 1.56 Blue
+Block, Photochromic, 1.60, 1.67, 1.74, Progressive, Office). The
+included logo SVG can be swapped with the official brand assets at
+any time without code changes.
+
+> **Disclaimer.** This simulator is an estimation tool. All final
+> values must be validated by an optical laboratory before
+> manufacturing.
 
 ## License
 

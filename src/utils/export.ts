@@ -7,10 +7,15 @@ import type { FrameData, LensData, ThicknessResult } from '@/types';
 // =====================================================================
 
 export async function exportScreenshot(elementId = 'presbyta-3d-canvas'): Promise<void> {
-  const el = document.getElementById(elementId) as HTMLCanvasElement | null;
-  if (!el) return;
-  // For Three.js canvases, the buffer is preserved (we set preserveDrawingBuffer)
-  const dataUrl = el.toDataURL('image/png');
+  const wrapper = document.getElementById(elementId);
+  // R3F sets the id on the outer wrapper; the actual <canvas> is its first child.
+  const canvas =
+    wrapper instanceof HTMLCanvasElement
+      ? wrapper
+      : (wrapper?.querySelector('canvas') as HTMLCanvasElement | null) ??
+        (document.querySelector('canvas') as HTMLCanvasElement | null);
+  if (!canvas) return;
+  const dataUrl = canvas.toDataURL('image/png');
   const link = document.createElement('a');
   link.download = `presbyta-lens-${Date.now()}.png`;
   link.href = dataUrl;
@@ -171,6 +176,19 @@ export async function exportReportPdf(
       y += (lines.length - 1) * 4;
     }
   }
+
+  // Disclaimer block (always present)
+  y += 10;
+  pdf.setFillColor(252, 244, 220);
+  pdf.rect(10, y - 4, pageW - 20, 14, 'F');
+  pdf.setTextColor(120, 80, 0);
+  pdf.setFontSize(8);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('ESTIMATION ONLY', 14, y);
+  pdf.setFont('helvetica', 'normal');
+  const disclaimer =
+    'This document is an estimation produced by the PRESBYTA simulator. Final lens values must be validated by an optical laboratory before manufacturing.';
+  pdf.text(pdf.splitTextToSize(disclaimer, pageW - 28), 14, y + 4);
 
   // Footer
   pdf.setTextColor(120, 120, 130);

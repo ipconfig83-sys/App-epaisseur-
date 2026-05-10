@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { radiusFromPower, sagitta } from '@/engine/geometry';
 import { recommendBaseCurve } from '@/engine/curves';
-import type { LensData } from '@/types';
+import type { CustomShape, LensData } from '@/types';
+import { makeCustomCutter } from '@/utils/svgImport';
 
 // =====================================================================
 // Procedural lens geometry
@@ -171,8 +172,12 @@ export function buildLensGeometry(
 export function makeShapeCutter(
   shape: string,
   aMm: number,
-  bMm: number
+  bMm: number,
+  custom?: CustomShape | null
 ): (x: number, y: number) => boolean {
+  if (custom && custom.points.length >= 3) {
+    return makeCustomCutter(custom);
+  }
   const halfA = aMm / 2;
   const halfB = bMm / 2;
   switch (shape) {

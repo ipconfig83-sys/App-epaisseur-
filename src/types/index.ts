@@ -19,7 +19,35 @@ export type FrameShape =
 
 export type LensType = 'single-vision' | 'progressive' | 'office';
 
-export type AppMode = 'patient' | 'laboratory';
+export type AppMode = 'patient' | 'laboratory' | 'quotation' | 'validation';
+
+export type Currency = 'MAD' | 'EUR' | 'USD';
+
+export interface QuotationPreferences {
+  progressive: boolean;
+  blueBlock: boolean;
+  photochromic: boolean;
+  office: boolean;
+}
+
+export interface ValidationMeasurement {
+  measuredCenterMm: number;
+  measuredEdgeMm: number;
+  batchNumber: string;
+  technician: string;
+  notes: string;
+}
+
+export interface CustomShape {
+  /** Source filename. */
+  name: string;
+  /** Polygon points, mm coordinates centred on the lens optical centre. */
+  points: [number, number][];
+  /** Bounding-box width in mm. */
+  aMm: number;
+  /** Bounding-box height in mm. */
+  bMm: number;
+}
 
 export type Theme = 'dark' | 'light';
 

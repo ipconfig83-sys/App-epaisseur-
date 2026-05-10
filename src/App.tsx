@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSimulatorStore } from '@/store/useSimulatorStore';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import DisclaimerBanner from '@/components/layout/DisclaimerBanner';
 import SimulatorPage from '@/pages/SimulatorPage';
 import AboutPage from '@/pages/AboutPage';
 
@@ -26,6 +27,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <DisclaimerBanner />
       <Header />
       <main className="flex-1">
         {page === 'simulator' ? <SimulatorPage /> : <AboutPage />}

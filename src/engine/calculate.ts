@@ -315,17 +315,97 @@ function buildWarnings(
   prismThinningApplied: boolean
 ): Warning[] {
   const out: Warning[] = [];
+  const F_se = sphericalEquivalent(lens.sphere, lens.cylinder);
+  const isPlus = F_se > 0;
+  const isMinus = F_se < 0;
 
-  // MBS check
+  // ── 1. INSUFFICIENT DIAMETER (lens blank cannot cover the frame) ──
   if (!blank.fits) {
     out.push({
       severity: 'error',
-      code: 'MBS_FAILED',
-      message: `Lens diameter ${lens.diameter.toFixed(0)} mm is below the minimum blank size ${blank.minimumBlankSize.toFixed(0)} mm. Increase Ø or reduce decentration.`,
+      code: 'INSUFFICIENT_DIAMETER',
+      message: `Insufficient lens diameter: Ø ${lens.diameter.toFixed(0)} mm is below the minimum blank size ${blank.minimumBlankSize.toFixed(0)} mm required by this frame and decentration. Increase the blank diameter or reduce decentration.`,
     });
   }
 
-  // ANSI checks
+  // ── 2. EXCESSIVE DECENTRATION ──
+  if (blank.totalDecentration > 6) {
+    out.push({
+      severity: 'error',
+      code: 'EXCESSIVE_DECENTRATION',
+      message: `Excessive decentration: total ${blank.totalDecentration.toFixed(1)} mm (H ${blank.effectiveDecentrationH.toFixed(1)} / V ${blank.effectiveDecentrationV.toFixed(1)} mm). Verify the patient's PD and fitting height before ordering.`,
+    });
+  } else if (blank.totalDecentration > 4) {
+    out.push({
+      severity: 'warning',
+      code: 'HIGH_DECENTRATION',
+      message: `Notable decentration: total ${blank.totalDecentration.toFixed(1)} mm (H ${blank.effectiveDecentrationH.toFixed(1)} / V ${blank.effectiveDecentrationV.toFixed(1)} mm). Confirm the blank diameter is adequate.`,
+    });
+  }
+
+  // ── 3. POOR FRAME CHOICE ──
+  // Large frame + strong minus → very thick edges
+  if (frame.aSize > 56 && lens.sphere <= -4) {
+    out.push({
+      severity: 'warning',
+      code: 'POOR_FRAME_CHOICE',
+      message: `Poor frame choice: A=${frame.aSize.toFixed(0)} mm with ${lens.sphere.toFixed(2)} D will produce visibly thick edges. Recommend a smaller A-size or a higher index.`,
+    });
+  }
+  // Drilled rimless + high-index brittle material
+  if (frame.type === 'rimless' && lens.index >= 1.67) {
+    out.push({
+      severity: 'warning',
+      code: 'POOR_FRAME_CHOICE',
+      message: 'Poor frame choice: high-index 1.67+ is brittle for drilled rimless mounts. Prefer MR-8 (1.60) or polycarbonate.',
+    });
+  }
+  // Semi-rimless with low edge — groove won't hold
+  if (frame.type === 'semi-rimless' && lens.minEdgeThickness < 1.8) {
+    out.push({
+      severity: 'info',
+      code: 'POOR_FRAME_CHOICE',
+      message: `Nylon-grooved frames require ≥ 2.0 mm edge thickness; configured minimum ${lens.minEdgeThickness.toFixed(2)} mm may not hold.`,
+    });
+  }
+
+  // ── 4. HIGH MINUS EDGE THICKNESS ──
+  if (isMinus && finalEdge > 7) {
+    out.push({
+      severity: 'error',
+      code: 'HIGH_MINUS_EDGE',
+      message: `High-minus edge: ${finalEdge.toFixed(2)} mm exceeds 7.0 mm. Strongly recommend a higher refractive index (1.67 or 1.74) and a smaller frame.`,
+    });
+  } else if (isMinus && finalEdge > 5) {
+    out.push({
+      severity: 'warning',
+      code: 'HIGH_MINUS_EDGE',
+      message: `High-minus edge: ${finalEdge.toFixed(2)} mm. Consider PRESBYTA 1.67 or 1.74 to improve cosmetics.`,
+    });
+  } else if (finalEdge > 4) {
+    out.push({
+      severity: 'info',
+      code: 'EDGE_NOTABLE',
+      message: `Edge thickness ${finalEdge.toFixed(2)} mm is acceptable but a higher index could improve cosmetics.`,
+    });
+  }
+
+  // ── 5. HIGH PLUS CENTRE THICKNESS ──
+  if (isPlus && finalCenter > 7) {
+    out.push({
+      severity: 'error',
+      code: 'HIGH_PLUS_CENTER',
+      message: `High-plus centre: ${finalCenter.toFixed(2)} mm exceeds 7.0 mm.${prismThinningApplied ? ' Prism thinning is already applied.' : ' Prism thinning is strongly recommended.'} Consider an aspheric design or higher index.`,
+    });
+  } else if (isPlus && finalCenter > 5) {
+    out.push({
+      severity: 'warning',
+      code: 'HIGH_PLUS_CENTER',
+      message: `High-plus centre: ${finalCenter.toFixed(2)} mm.${prismThinningApplied ? ' Prism thinning applied.' : ' Prism thinning recommended.'}`,
+    });
+  }
+
+  // ── 6. ANSI Z80.1 compliance ──
   if (!ansi.centerOk) {
     out.push({
       severity: 'warning',
@@ -341,72 +421,27 @@ function buildWarnings(
     });
   }
 
-  // Edge / centre comfort
-  if (finalEdge > 6) {
+  // ── 7. Index too low for the prescription ──
+  if (Math.abs(F_se) >= 6 && lens.index <= 1.5) {
     out.push({
       severity: 'warning',
-      code: 'THICK_EDGE',
-      message: `Edge thickness ${finalEdge.toFixed(2)} mm is high. Consider a higher index or a smaller frame.`,
-    });
-  } else if (finalEdge > 4) {
-    out.push({
-      severity: 'info',
-      code: 'EDGE_NOTABLE',
-      message: `Edge thickness ${finalEdge.toFixed(2)} mm is acceptable but a higher index could improve cosmetics.`,
+      code: 'INDEX_TOO_LOW',
+      message: 'Strong prescription with low index 1.5 — significantly thicker lenses than necessary. Recommend PRESBYTA 1.67 or 1.74.',
     });
   }
-  if (finalCenter > 6) {
+  if (Math.abs(F_se) >= 4 && lens.index <= 1.56) {
     out.push({
-      severity: 'warning',
-      code: 'THICK_CENTER',
-      message: `Centre thickness ${finalCenter.toFixed(2)} mm is high — common for strong plus prescriptions. Prism thinning ${prismThinningApplied ? 'has been applied' : 'recommended'}.`,
+      severity: 'info',
+      code: 'INDEX_SUBOPTIMAL',
+      message: 'Index 1.56 is sub-optimal for this prescription magnitude. PRESBYTA 1.60 / 1.67 would improve cosmetics.',
     });
   }
 
-  // Frame / material brittleness
-  if (frame.type === 'rimless' && lens.index >= 1.67) {
-    out.push({
-      severity: 'info',
-      code: 'RIMLESS_BRITTLE',
-      message: 'High-index materials (≥ 1.67) can be brittle for drilled rimless mounts. Prefer MR-8 or polycarbonate.',
-    });
-  }
-  if (frame.type === 'semi-rimless' && Math.abs(lens.sphere) >= 4) {
-    out.push({
-      severity: 'info',
-      code: 'GROOVE_THIN',
-      message: 'Nylon-grooved mounts require ≥ 2.0 mm edge thickness on the groove side.',
-    });
-  }
-  if (Math.abs(lens.sphere) >= 6 && lens.index <= 1.5) {
-    out.push({
-      severity: 'warning',
-      code: 'INDEX_LOW',
-      message: 'Strong prescription with low index will produce visibly thick lenses.',
-    });
-  }
-  if (frame.aSize > 58 && lens.sphere <= -4) {
-    out.push({
-      severity: 'warning',
-      code: 'FRAME_TOO_LARGE',
-      message: 'Large frame combined with strong minus power increases edge thickness considerably.',
-    });
-  }
-
-  // Decentration
-  if (Math.abs(blank.effectiveDecentrationH) > 5 || Math.abs(blank.effectiveDecentrationV) > 5) {
-    out.push({
-      severity: 'info',
-      code: 'HIGH_DECENTRATION',
-      message: `High decentration detected (H ${blank.effectiveDecentrationH.toFixed(1)} mm, V ${blank.effectiveDecentrationV.toFixed(1)} mm).`,
-    });
-  }
-
-  // Prism thinning info
+  // ── 8. Prism thinning info ──
   if (prismThinningApplied) {
     out.push({
       severity: 'info',
-      code: 'PRISM_THINNING',
+      code: 'PRISM_THINNING_APPLIED',
       message: 'Prism thinning has been applied to redistribute centre thickness.',
     });
   }

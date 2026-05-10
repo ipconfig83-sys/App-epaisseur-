@@ -9,12 +9,17 @@ import {
   FlaskConical,
   Stethoscope,
   ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import Logo from '@/components/brand/Logo';
+import { PRESBYTA_CATALOG } from '@/data/products';
+import { formatPrice } from '@/data/pricing';
+import { useSimulatorStore } from '@/store/useSimulatorStore';
 
 export default function AboutPage() {
   const { t } = useTranslation();
+  const { currency } = useSimulatorStore();
 
   const features = [
     { icon: <Cpu size={20} />, key: 'precision' },
@@ -30,7 +35,7 @@ export default function AboutPage() {
   ] as const;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8 sm:space-y-10">
       {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -42,10 +47,10 @@ export default function AboutPage() {
           <div className="text-[11px] uppercase tracking-[0.4em] text-gold-300/80 mb-2">
             {t('about.eyebrow')}
           </div>
-          <h1 className="text-4xl sm:text-5xl font-display font-extrabold text-white">
+          <h1 className="text-3xl sm:text-5xl font-display font-extrabold text-white">
             {t('about.title')}
           </h1>
-          <p className="mt-5 text-lg text-white/70 max-w-3xl mx-auto leading-relaxed">
+          <p className="mt-5 text-base sm:text-lg text-white/70 max-w-3xl mx-auto leading-relaxed">
             {t('about.intro')}
           </p>
         </div>
@@ -65,13 +70,74 @@ export default function AboutPage() {
       </motion.div>
 
       {/* Brand narrative */}
-      <GlassCard className="!p-8">
-        <div className="space-y-5 text-white/80 leading-relaxed">
-          <p className="text-base">{t('about.p1')}</p>
-          <p className="text-base">{t('about.p2')}</p>
-          <p className="text-base text-gold-200">{t('about.p3')}</p>
+      <GlassCard className="!p-6 sm:!p-8">
+        <div className="space-y-5 text-white/80 leading-relaxed text-sm sm:text-base">
+          <p>{t('about.p1')}</p>
+          <p>{t('about.p2')}</p>
+          <p className="text-gold-200">{t('about.p3')}</p>
         </div>
       </GlassCard>
+
+      {/* Product catalogue */}
+      <section>
+        <div className="text-center mb-6">
+          <div className="text-[10px] uppercase tracking-[0.3em] text-gold-300/80">
+            PRESBYTA Lens Catalogue
+          </div>
+          <h2 className="font-display text-2xl font-bold text-white mt-1">
+            Engineered range
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {PRESBYTA_CATALOG.map((p, i) => (
+            <motion.div
+              key={p.code}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              className="glass-card p-4"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-display font-bold text-white text-sm">
+                    {p.name}
+                  </h3>
+                  <div className="font-mono text-[10px] text-white/40 mt-0.5">
+                    {p.code} · n={p.index} · {p.material}
+                  </div>
+                </div>
+                <span
+                  className={`pill text-[9px] ${
+                    p.tier === 'signature'
+                      ? 'bg-gold-500/15 text-gold-200 border border-gold-400/40'
+                      : p.tier === 'premium'
+                      ? 'bg-presbyta-400/15 text-presbyta-100 border border-presbyta-400/30'
+                      : 'bg-white/5 text-white/60 border border-white/10'
+                  }`}
+                >
+                  {p.tier}
+                </span>
+              </div>
+              <p className="text-xs text-white/65 mt-2 leading-relaxed">
+                {p.shortDescription}
+              </p>
+              <div className="flex flex-wrap gap-1 mt-2.5">
+                {p.features.slice(0, 4).map((f) => (
+                  <span
+                    key={f}
+                    className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/60"
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
+              <div className="text-[10px] text-gold-300 font-mono mt-2 text-end">
+                {formatPrice(p.basePriceMAD, currency)}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </section>
 
       {/* Audience */}
       <section>
@@ -141,13 +207,30 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Disclaimer block — full text */}
+      <GlassCard className="!p-6 sm:!p-8 border-amber-400/30 bg-amber-500/5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-200 shrink-0">
+            <AlertTriangle size={18} />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-amber-300/80 mb-1">
+              {t('disclaimer.badge')}
+            </div>
+            <p className="text-sm text-amber-100/90 leading-relaxed">
+              {t('disclaimer.long')}
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+
       {/* Owner / institutional plate */}
-      <GlassCard className="!p-8 text-center">
+      <GlassCard className="!p-6 sm:!p-8 text-center">
         <div className="flex flex-col items-center gap-4">
           <div className="text-[10px] uppercase tracking-[0.4em] text-gold-300/80">
             Brand ownership
           </div>
-          <div className="font-display text-3xl font-extrabold text-white">
+          <div className="font-display text-2xl sm:text-3xl font-extrabold text-white">
             PRESBYTA<span className="text-gold-300"> × </span>Lunette 15 Minutes
           </div>
           <p className="text-sm text-white/70 max-w-2xl leading-relaxed">
@@ -162,7 +245,7 @@ export default function AboutPage() {
         <span className="mx-2">·</span>
         <span>A Lunette 15 Minutes brand</span>
         <span className="mx-2">·</span>
-        <span>v1.0.0</span>
+        <span>v2.0.0</span>
       </div>
     </div>
   );

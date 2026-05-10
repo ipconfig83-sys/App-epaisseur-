@@ -1,8 +1,16 @@
 import { useTranslation } from 'react-i18next';
-import { Moon, Sun, FlaskConical, User2, Languages } from 'lucide-react';
+import {
+  Moon,
+  Sun,
+  FlaskConical,
+  User2,
+  Languages,
+  ShoppingBag,
+  ClipboardCheck,
+} from 'lucide-react';
 import Logo from '@/components/brand/Logo';
 import { useSimulatorStore } from '@/store/useSimulatorStore';
-import type { Language } from '@/types';
+import type { AppMode, Language } from '@/types';
 
 export default function Header() {
   const { t } = useTranslation();
@@ -15,14 +23,21 @@ export default function Header() {
     { code: 'ar', label: 'ع' },
   ];
 
+  const modes: { id: AppMode; icon: React.ReactNode; key: string }[] = [
+    { id: 'laboratory', icon: <FlaskConical size={13} />, key: 'laboratory' },
+    { id: 'patient', icon: <User2 size={13} />, key: 'patient' },
+    { id: 'quotation', icon: <ShoppingBag size={13} />, key: 'quotation' },
+    { id: 'validation', icon: <ClipboardCheck size={13} />, key: 'validation' },
+  ];
+
   return (
     <header className="sticky top-0 z-30 backdrop-blur-xl bg-presbyta-950/60 border-b border-white/10">
-      <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center gap-6">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center gap-3 sm:gap-6 flex-wrap">
         <button onClick={() => setPage('simulator')} className="cursor-pointer">
           <Logo />
         </button>
 
-        <nav className="hidden md:flex items-center gap-1 ms-6">
+        <nav className="hidden md:flex items-center gap-1 ms-2">
           <NavLink active={page === 'simulator'} onClick={() => setPage('simulator')}>
             {t('nav.simulator')}
           </NavLink>
@@ -31,16 +46,28 @@ export default function Header() {
           </NavLink>
         </nav>
 
-        <div className="ms-auto flex items-center gap-2">
-          {/* Mode toggle */}
-          <div className="hidden sm:flex items-center bg-white/5 border border-white/10 rounded-lg p-1">
-            <ModePill active={mode === 'laboratory'} onClick={() => setMode('laboratory')} icon={<FlaskConical size={14} />}>
-              {t('modes.laboratory')}
-            </ModePill>
-            <ModePill active={mode === 'patient'} onClick={() => setMode('patient')} icon={<User2 size={14} />}>
-              {t('modes.patient')}
-            </ModePill>
+        <div className="ms-auto flex items-center gap-2 flex-wrap">
+          {/* Mode toggle (4 modes) */}
+          <div className="hidden md:flex items-center bg-white/5 border border-white/10 rounded-lg p-1 overflow-x-auto">
+            {modes.map((m) => (
+              <ModePill key={m.id} active={mode === m.id} onClick={() => setMode(m.id)} icon={m.icon}>
+                {t(`modes.${m.key}`)}
+              </ModePill>
+            ))}
           </div>
+
+          {/* Compact mode select for small screens */}
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as AppMode)}
+            className="md:hidden glass-input !py-1.5 !w-auto text-[11px]"
+          >
+            {modes.map((m) => (
+              <option key={m.id} value={m.id} className="bg-presbyta-900">
+                {t(`modes.${m.key}`)}
+              </option>
+            ))}
+          </select>
 
           {/* Language */}
           <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">

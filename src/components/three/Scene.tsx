@@ -4,15 +4,16 @@ import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, RotateCw, ZoomIn, ZoomOut, Layers } from 'lucide-react';
 import LensMesh from './LensMesh';
-import type { FrameData, LensData } from '@/types';
+import type { CustomShape, FrameData, LensData } from '@/types';
 
 interface SceneProps {
   lens: LensData;
   frame: FrameData;
   compareWith?: LensData; // optional second lens for comparison
+  customShape?: CustomShape | null;
 }
 
-export default function Scene({ lens, frame, compareWith }: SceneProps) {
+export default function Scene({ lens, frame, compareWith, customShape = null }: SceneProps) {
   const { t } = useTranslation();
   const [autoRotate, setAutoRotate] = useState(true);
   const [showWire, setShowWire] = useState(false);
@@ -52,6 +53,7 @@ export default function Scene({ lens, frame, compareWith }: SceneProps) {
                 cut
                 tint="#cfe2ff"
                 showWireframe={showWire}
+                customShape={customShape}
               />
             </group>
             {compareWith && (
@@ -62,6 +64,7 @@ export default function Scene({ lens, frame, compareWith }: SceneProps) {
                   cut
                   tint="#fff7d6"
                   showWireframe={showWire}
+                  customShape={customShape}
                 />
               </group>
             )}

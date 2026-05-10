@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Frame } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import { Field, NumberInput, SelectInput } from '@/components/ui/Field';
+import FrameShapeImport from './FrameShapeImport';
 import { useSimulatorStore } from '@/store/useSimulatorStore';
 import type { FrameShape, FrameType } from '@/types';
 
@@ -48,6 +49,7 @@ export default function FrameForm() {
           <NumberInput value={frame.decentration} onChange={(v) => setFrame({ decentration: v })} step={0.1} min={0} max={10} />
         </Field>
       </div>
+      <FrameShapeImport />
     </GlassCard>
   );
 }

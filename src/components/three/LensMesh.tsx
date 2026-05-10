@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { MeshTransmissionMaterial } from '@react-three/drei';
 import { buildLensGeometry, makeShapeCutter } from '@/three/lensGeometry';
-import type { FrameData, LensData } from '@/types';
+import type { CustomShape, FrameData, LensData } from '@/types';
 
 interface LensMeshProps {
   lens: LensData;
@@ -9,6 +9,7 @@ interface LensMeshProps {
   cut: boolean;
   tint?: string;
   showWireframe?: boolean;
+  customShape?: CustomShape | null;
 }
 
 export default function LensMesh({
@@ -17,11 +18,14 @@ export default function LensMesh({
   cut,
   tint = '#cfe2ff',
   showWireframe = false,
+  customShape = null,
 }: LensMeshProps) {
   const geometry = useMemo(() => {
-    const cutter = cut ? makeShapeCutter(frame.shape, frame.aSize, frame.bSize) : undefined;
+    const cutter = cut
+      ? makeShapeCutter(frame.shape, frame.aSize, frame.bSize, customShape)
+      : undefined;
     return buildLensGeometry(lens, { segments: 96, scale: 0.04, shapeCutter: cutter });
-  }, [lens, frame, cut]);
+  }, [lens, frame, cut, customShape]);
 
   return (
     <group>
