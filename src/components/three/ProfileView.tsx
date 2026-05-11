@@ -359,7 +359,9 @@ function Readout({
           et={data.maxEdge}
           diameter={data.crossDiameter}
           isPlus={data.isPlus}
-          frameType={lens ? 'full-rim' : 'full-rim'}
+          R1={result.meridians[0].frontRadius}
+          R2={data.worstBackRadius}
+          frameType="full-rim"
         />
       </g>
 
@@ -479,12 +481,16 @@ function CrossSection({
   et,
   diameter,
   isPlus,
+  R1,
+  R2,
   frameType,
 }: {
   ct: number;
   et: number;
   diameter: number;
   isPlus: boolean;
+  R1: number;
+  R2: number;
   frameType: 'full-rim' | 'rimless' | 'semi-rimless' | string;
 }) {
   const W = 256;
@@ -495,19 +501,27 @@ function CrossSection({
   const xScale = W / Math.max(diameter, 1);
   const cx = W / 2;
 
-  // Build profile points
+  // Build profile points using TRUE spherical sagittas — the same
+  // math the engine uses to predict edge thickness. The thickness
+  // at radius r:  t(r) = Ct + (s_back(r) − s_front(r)) for minus,
+  //               t(r) = Ct − (s_front(r) − s_back(r)) for plus.
+  // No parabolic shortcut.
+  const sag = (R: number, r: number) =>
+    R <= 0 || r <= 0 ? 0 : r >= R ? R : R - Math.sqrt(R * R - r * r);
   const N = 60;
   const front: [number, number][] = [];
   const back: [number, number][] = [];
   for (let i = 0; i <= N; i++) {
     const u = i / N;
     const xMm = -semi + u * diameter;
-    const ratio = Math.abs(xMm) / semi;
-    const k = ratio * ratio;
-    const t = isPlus ? ct - (ct - et) * k : ct + (et - ct) * k;
+    const r = Math.abs(xMm);
+    const s1 = sag(R1, r);
+    const s2 = sag(R2, r);
+    const t = isPlus ? ct - (s1 - s2) : ct + (s2 - s1);
+    const tSafe = Math.max(0.3, t);
     const px = cx + xMm * xScale;
-    front.push([px, H / 2 - (t / 2) * yScale]);
-    back.push([px, H / 2 + (t / 2) * yScale]);
+    front.push([px, H / 2 - (tSafe / 2) * yScale]);
+    back.push([px, H / 2 + (tSafe / 2) * yScale]);
   }
   const path =
     `M ${front[0][0]} ${front[0][1]} ` +
@@ -605,6 +619,7 @@ interface ProfileData {
   scale: number;
   isPlus: boolean;
   worstMeridianAngle: number;
+  worstBackRadius: number;
   crossDiameter: number;
   deltaH: number; // temp - nasal
   deltaV: number; // sup - inf
@@ -635,6 +650,7 @@ function computeProfile(
   let maxPoint: Sample | null = null;
   let worstMeridianAngle = 0;
   let crossDiameter = 0;
+  let worstBackRadius = 0;
 
   for (let i = 0; i < PERIM_SAMPLES; i++) {
     const theta = (i / PERIM_SAMPLES) * 2 * Math.PI;
@@ -656,6 +672,9 @@ function computeProfile(
       maxPoint = sample;
       worstMeridianAngle = sample.angleDeg;
       crossDiameter = 2 * sample.radius;
+      // Capture the back-surface radius at the worst meridian.
+      const F = meridianPower(lens.sphere, lens.cylinder, lens.axis, sample.angleDeg);
+      worstBackRadius = Math.abs(radiusFromPower(F - baseCurve, lens.index));
     }
     if (edge < minEdge) {
       minEdge = edge;
@@ -730,6 +749,7 @@ function computeProfile(
     scale,
     isPlus,
     worstMeridianAngle,
+    worstBackRadius,
     crossDiameter,
     deltaH: (cardinalMap[0] ?? 0) - (cardinalMap[180] ?? 0),
     deltaV: (cardinalMap[90] ?? 0) - (cardinalMap[270] ?? 0),

@@ -2,15 +2,16 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 
 /**
- * Optical-bench backdrop placed behind the lens.
+ * Bench surface backdrop placed behind the lens.
  *
- * The MeshTransmissionMaterial samples whatever is behind the lens to
- * compute refraction, so the backdrop has to contain readable content
- * for the refraction effect to be perceptible. We use a calm,
- * laboratory-grade target reticle: a calibration grid in mm with two
- * cross-hairs, a discrete brand-mark, and nothing else. No eye chart,
- * no marketing text — the goal is for the rendered lens to read as a
- * real piece of measurement equipment, not a CGI demo.
+ * Everything decorative has been removed — no reticle, no grid, no
+ * Snellen letters, no brand panel. The lens is the focus of the
+ * scene and any "engineering target" content behind it created the
+ * fake-photoreal look the user flagged.
+ *
+ * What remains is a soft, slightly bluish-grey bench surface with a
+ * gentle radial darkening at the corners — enough to make the lens
+ * stand out without imposing any pattern of its own.
  */
 export default function Backdrop() {
   const texture = useMemo(() => makeBenchTexture(), []);
@@ -33,83 +34,29 @@ function makeBenchTexture(): THREE.Texture {
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
 
-  // Lab paper background — bright, almost white, so the lens
-  // transmission samples a bright source and reads as a transparent
-  // resin piece rather than a dark mirror.
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#f4f7fb');
-  grad.addColorStop(1, '#e0e6ef');
-  ctx.fillStyle = grad;
+  // Plain neutral bench surface.
+  const base = ctx.createLinearGradient(0, 0, 0, h);
+  base.addColorStop(0, '#eaedf2');
+  base.addColorStop(1, '#d6dae1');
+  ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
-  // 1 mm calibration grid (light)
-  const pxPerMm = w / 200; // 200 mm wide bench
-  ctx.strokeStyle = 'rgba(35, 80, 130, 0.10)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= w; x += pxPerMm) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= h; y += pxPerMm) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-  // 10 mm calibration grid (stronger)
-  ctx.strokeStyle = 'rgba(35, 80, 130, 0.28)';
-  ctx.lineWidth = 1.4;
-  for (let x = 0; x <= w; x += pxPerMm * 10) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, h);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= h; y += pxPerMm * 10) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
+  // Very gentle vignette to keep the lens in focus.
+  const vignette = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.65);
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
 
-  // Central reticle
-  ctx.strokeStyle = 'rgba(15, 37, 71, 0.55)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, h / 2);
-  ctx.lineTo(w, h / 2);
-  ctx.moveTo(w / 2, 0);
-  ctx.lineTo(w / 2, h);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 100, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, 50, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Tick labels every 10 mm along the central axes
-  ctx.fillStyle = 'rgba(15, 37, 71, 0.55)';
-  ctx.font = '600 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  for (let mm = -90; mm <= 90; mm += 10) {
-    if (mm === 0) continue;
-    const x = w / 2 + mm * pxPerMm;
-    ctx.fillText(`${mm}`, x, h / 2 + 14);
-  }
-
-  // Discrete branding bottom-right
-  ctx.fillStyle = 'rgba(15, 37, 71, 0.45)';
-  ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
+  // A single discreet brand mark — small, low-contrast, off-corner.
+  ctx.fillStyle = 'rgba(60, 80, 110, 0.18)';
+  ctx.font = '500 9px "Plus Jakarta Sans", sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('PRESBYTA  ·  Optical bench reticle', w - 18, h - 14);
+  ctx.fillText('PRESBYTA', w - 14, h - 12);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
   tex.needsUpdate = true;
   return tex;
 }

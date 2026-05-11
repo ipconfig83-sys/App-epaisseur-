@@ -27,17 +27,17 @@ export default function Scene({ lens, frame, result, compareWith, customShape = 
   };
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-2xl overflow-hidden bg-[#e6ecf3] border border-white/10">
+    <div className="relative w-full h-full min-h-[420px] rounded-2xl overflow-hidden bg-[#e3e7ec] border border-white/10">
       <Canvas
         dpr={[1, 2]}
-        camera={{ position: [0, 0.15, 4.2 / zoom], fov: 28 }}
+        camera={{ position: [0, 0.1, 4.6 / zoom], fov: 24 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         id="presbyta-3d-canvas"
       >
-        {/* Daylight lab-bench background — light enough that the lens
-            transmission samples a bright scene and the resin reads as
-            transparent rather than as a dark mirror. */}
-        <color attach="background" args={['#dce4ee']} />
+        {/* Neutral bench surface, no marketing palette. Tighter FOV
+            (24°) reduces perspective distortion so the lens reads as
+            a measurement object, not a wide-angle 3D demo. */}
+        <color attach="background" args={['#e1e5ea']} />
 
         {/* Soft, diffuse, neutral light only.
             No HDR environment map → no harsh specular bowls on the

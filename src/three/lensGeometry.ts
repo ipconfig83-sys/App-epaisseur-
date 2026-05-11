@@ -253,27 +253,39 @@ interface EdgeSlot {
 
 function makeEdgeProfile(type: FrameType): EdgeSlot[] {
   if (type === 'full-rim') {
+    // Real edging-machine V-bevel: a flat polished band on both
+    // sides of a small V apex (≈ 0.10 mm out) at the centre of edge
+    // thickness. The flats either side of the apex are the contact
+    // surfaces between the lens and the rim groove.
     return [
       { t: 0.00, outMm: 0.00 },
-      { t: 0.30, outMm: 0.00 },
-      { t: 0.50, outMm: 0.18 }, // V-bevel apex
-      { t: 0.70, outMm: 0.00 },
+      { t: 0.32, outMm: 0.00 },
+      { t: 0.44, outMm: 0.04 },
+      { t: 0.50, outMm: 0.10 },
+      { t: 0.56, outMm: 0.04 },
+      { t: 0.68, outMm: 0.00 },
       { t: 1.00, outMm: 0.00 },
     ];
   }
   if (type === 'semi-rimless') {
+    // Nylor / nylon-grooved frame: a small V groove cut INTO the
+    // edge at 50 % thickness — the nylon thread sits in this groove.
     return [
       { t: 0.00, outMm: 0.00 },
-      { t: 0.40, outMm: 0.00 },
-      { t: 0.50, outMm: -0.25 }, // groove apex
-      { t: 0.60, outMm: 0.00 },
+      { t: 0.42, outMm: 0.00 },
+      { t: 0.46, outMm: -0.08 },
+      { t: 0.50, outMm: -0.18 },
+      { t: 0.54, outMm: -0.08 },
+      { t: 0.58, outMm: 0.00 },
       { t: 1.00, outMm: 0.00 },
     ];
   }
-  // rimless — flat polished edge with a tiny outward roll
+  // Rimless — flat polished edge, just the gentlest outward roll.
   return [
     { t: 0.00, outMm: 0.00 },
-    { t: 0.50, outMm: 0.05 },
+    { t: 0.30, outMm: 0.015 },
+    { t: 0.50, outMm: 0.03 },
+    { t: 0.70, outMm: 0.015 },
     { t: 1.00, outMm: 0.00 },
   ];
 }
