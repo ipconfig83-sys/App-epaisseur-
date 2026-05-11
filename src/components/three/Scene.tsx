@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, RotateCw, ZoomIn, ZoomOut, Layers } from 'lucide-react';
@@ -17,7 +17,7 @@ interface SceneProps {
 
 export default function Scene({ lens, frame, result, compareWith, customShape = null }: SceneProps) {
   const { t } = useTranslation();
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(false);
   const [showWire, setShowWire] = useState(false);
   const [zoom, setZoom] = useState(1);
   const controlsRef = useRef<any>(null);
@@ -27,37 +27,29 @@ export default function Scene({ lens, frame, result, compareWith, customShape = 
   };
 
   return (
-    <div className="relative w-full h-full min-h-[420px] rounded-2xl overflow-hidden bg-gradient-to-br from-presbyta-900 via-presbyta-950 to-black border border-white/10">
+    <div className="relative w-full h-full min-h-[420px] rounded-2xl overflow-hidden bg-[#e6ecf3] border border-white/10">
       <Canvas
-        shadows
         dpr={[1, 2]}
-        camera={{ position: [0, 0.4, 4 / zoom], fov: 38 }}
+        camera={{ position: [0, 0.15, 4.2 / zoom], fov: 28 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         id="presbyta-3d-canvas"
       >
-        <color attach="background" args={['#0c1426']} />
-        {/* Lab-style soft ambient + neutral key light, no warm rim
-            (the previous gold rim made the lens look painted). */}
-        <ambientLight intensity={0.65} />
-        <directionalLight
-          position={[2.5, 3.5, 4]}
-          intensity={1.0}
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-          color="#ffffff"
-        />
-        <directionalLight position={[-2, 1, -1]} intensity={0.35} color="#cfd8e3" />
+        {/* Daylight lab-bench background — light enough that the lens
+            transmission samples a bright scene and the resin reads as
+            transparent rather than as a dark mirror. */}
+        <color attach="background" args={['#dce4ee']} />
+
+        {/* Soft, diffuse, neutral light only.
+            No HDR environment map → no harsh specular bowls on the
+            front surface, no "polished glass sphere" look. */}
+        <hemisphereLight args={['#ffffff', '#bcc6d3', 0.95]} />
+        <directionalLight position={[2.5, 3, 5]} intensity={0.55} color="#ffffff" />
+        <directionalLight position={[-3, 2, 3]} intensity={0.25} color="#e7eef7" />
 
         <Suspense fallback={null}>
-          {/* Calibration reticle behind the lens — provides readable
-              content for refraction without any cinematic styling. */}
+          {/* Calibration reticle behind the lens. */}
           <Backdrop />
 
-          <Environment preset="apartment" background={false} />
-
-          {/* No Float — a measurement object should not bob in space.
-              Rotation is driven by OrbitControls.autoRotate so the
-              user can stop it cleanly. */}
           <group position={compareWith ? [-1.4, 0, 0] : [0, 0, 0]}>
             <LensMesh
               lens={lens}
@@ -80,22 +72,18 @@ export default function Scene({ lens, frame, result, compareWith, customShape = 
               />
             </group>
           )}
-          <ContactShadows
-            position={[0, -1.3, 0]}
-            opacity={0.3}
-            scale={7}
-            blur={2.4}
-            far={3}
-            color="#04101e"
-          />
+          {/* No Environment, no ContactShadows.
+              Cinematic reflections and dark shadows under the lens
+              were what made the previous render look like polished
+              black glass instead of ophthalmic resin. */}
         </Suspense>
 
         <OrbitControls
           ref={controlsRef}
           enablePan={false}
           autoRotate={autoRotate}
-          autoRotateSpeed={1.4}
-          minDistance={1.6}
+          autoRotateSpeed={0.6}
+          minDistance={2.2}
           maxDistance={8}
         />
       </Canvas>
@@ -118,21 +106,21 @@ export default function Scene({ lens, frame, result, compareWith, customShape = 
 
       {/* Top-left HUD */}
       <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
-        <div className="pill bg-black/40 border border-white/10 text-white/80 backdrop-blur-md">
+        <div className="pill bg-presbyta-950/70 border border-white/15 text-white/90 backdrop-blur-md">
           <Box size={11} />
           <span className="font-mono">n = {lens.index.toFixed(2)}</span>
         </div>
-        <div className="pill bg-black/40 border border-gold-400/30 text-gold-200 backdrop-blur-md">
+        <div className="pill bg-presbyta-950/70 border border-gold-400/40 text-gold-200 backdrop-blur-md">
           <span>Ø {lens.diameter} mm</span>
         </div>
       </div>
 
       {/* Bottom HUD: power info */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-10 pointer-events-none">
-        <div className="text-[10px] uppercase tracking-[0.25em] text-white/40 font-mono">
-          PRESBYTA · 3D Lens Render
+        <div className="text-[10px] uppercase tracking-[0.25em] text-presbyta-900/55 font-mono">
+          PRESBYTA · Bench render
         </div>
-        <div className="font-mono text-xs text-white/70">
+        <div className="font-mono text-xs text-presbyta-900/75">
           SPH {fmt(lens.sphere)} · CYL {fmt(lens.cylinder)} · AXIS {lens.axis}°
         </div>
       </div>
@@ -162,7 +150,7 @@ function Tool({
       className={`p-2 rounded-lg backdrop-blur-md border transition ${
         active
           ? 'bg-gold-gradient text-presbyta-950 border-gold-400/60 shadow-gold-glow'
-          : 'bg-black/40 border-white/10 text-white/70 hover:bg-black/60 hover:text-white'
+          : 'bg-white/70 border-presbyta-200 text-presbyta-800 hover:bg-white hover:text-presbyta-900'
       }`}
     >
       {children}

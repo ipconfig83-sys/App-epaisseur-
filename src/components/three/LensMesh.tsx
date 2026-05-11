@@ -16,20 +16,25 @@ interface LensMeshProps {
 }
 
 /**
- * Renders a single lens with physically-derived geometry:
+ * Renders a single ophthalmic lens with parameters tuned to match the
+ * appearance of a real surfaced resin lens photographed on a lab
+ * bench — NOT a polished glass sphere.
  *
- *   • Surface sagittas come directly from R1 / R2 = 1000(n−1)/F.
- *   • Centre thickness is read from the engine result, so the rendered
- *     thickness matches the value shown in the results panel exactly.
- *   • Refraction index ior = lens.index → bending strength matches the
- *     prescription.
- *   • Chromatic aberration scales inversely with Abbe number, so a
- *     1.74 lens shows visibly more colour fringing on the edge than
- *     a 1.50 CR-39 lens — the same behaviour the patient experiences.
- *   • Body-tint table reflects the faint substrate cast of real
- *     ophthalmic materials.
- *   • Frame type drives the edge finish: V-bevel for full-rim, flat
- *     polished for rimless, nylor groove for semi-rimless.
+ * Decisions:
+ *   • No HDR environment map. We were inheriting harsh specular
+ *     reflections from drei's <Environment>, which made the lens
+ *     read as a black mirror. The scene now uses hemisphere +
+ *     diffuse directional only, so the lens picks up soft, even
+ *     light just like a real photo would.
+ *   • Roughness raised to 0.18 — resin is not optical-grade glass;
+ *     a tiny amount of microsurface roughness kills the mirror sheen.
+ *   • Clearcoat removed. Modern AR coatings are nearly invisible in
+ *     photos; clearcoat={1} produced an artificial second highlight.
+ *   • Background of MeshTransmissionMaterial forced to a bright lab
+ *     paper colour. Without this the transmission shader samples the
+ *     scene's dark corners, which is what made the lens look dark.
+ *   • Body-tint kept very faint so CR-39 stays nearly clear and only
+ *     1.67 / 1.74 carry a perceptible warm cast — matching reality.
  */
 export default function LensMesh({
   lens,
@@ -54,42 +59,55 @@ export default function LensMesh({
   }, [lens, frame, result, cut, customShape]);
 
   // Abbe-driven chromatic dispersion (lower V → wider fringe).
-  // Calibrated so CR-39 (V=58) is almost invisible (≈ 0.012) and a
-  // 1.74 lens (V=33) shows clear fringing (≈ 0.055).
+  // Calibrated low so CR-39 (V=58) is invisible and 1.74 lenses
+  // show only the faintest hint of colour at the edge.
   const abbe = ABBE_BY_INDEX[lens.index] ?? 40;
-  const chromaticAberration = Math.min(0.08, Math.max(0.01, 1.7 / abbe));
+  const chromaticAberration = Math.min(0.025, Math.max(0.003, 0.6 / abbe));
 
-  // Per-index body tint (overridable for compare-lens highlight).
-  const baseColor = tint ?? TINT_BY_INDEX[lens.index] ?? '#ffffff';
+  // Substrate tint — kept very, very subtle.
+  const baseColor = tint ?? TINT_BY_INDEX[lens.index] ?? '#fbfdff';
 
-  // Refraction quality scales with index — high-index lenses bend
-  // light more, so we sample more thoroughly to keep edges sharp.
-  const samples = lens.index >= 1.67 ? 8 : 6;
+  // Forced light "lab paper" background for the refraction shader.
+  // This is what makes the lens read as a transparent resin lens
+  // illuminated by overhead bench lighting, instead of a dark mirror.
+  const bgTexture = useMemo(() => {
+    const tex = new THREE.Color('#eaf0f7');
+    return tex;
+  }, []);
 
   return (
     <group>
-      <mesh geometry={geometry} castShadow receiveShadow>
+      <mesh geometry={geometry}>
         <MeshTransmissionMaterial
-          samples={samples}
-          resolution={1024}
+          samples={6}
+          resolution={768}
           transmission={1}
-          roughness={0.03}
-          // Use the actual rendered centre thickness (mm → scene units)
-          // so refraction depth corresponds to real lens depth.
-          thickness={Math.max(0.3, result.finalCenterThickness * 0.04)}
+          // Slight surface roughness — kills the mirror-glass sheen.
+          roughness={0.18}
+          // Real lens centre thickness, scaled to scene units. Drives
+          // how much light bends as it passes through the resin.
+          thickness={Math.max(0.25, result.finalCenterThickness * 0.04)}
           ior={lens.index}
           chromaticAberration={chromaticAberration}
           anisotropicBlur={0}
-          distortion={0.02}
-          distortionScale={0.15}
+          // Almost no distortion — ophthalmic resin lenses are well
+          // surfaced and do not warp the world behind them visibly.
+          distortion={0.005}
+          distortionScale={0.1}
           temporalDistortion={0}
-          color={baseColor}
+          color="#ffffff"
           attenuationColor={baseColor}
-          attenuationDistance={lens.index >= 1.67 ? 22 : 32}
-          clearcoat={1}
-          clearcoatRoughness={0.03}
+          attenuationDistance={80}
+          // Render against bright lab paper instead of the scene's
+          // env capture. This is the single biggest fix for the
+          // "dark mirror" look.
+          background={bgTexture as unknown as THREE.Texture}
+          // No clearcoat — a real ophthalmic lens does not show a
+          // second specular highlight on top of the substrate.
+          clearcoat={0}
+          clearcoatRoughness={0}
           backside
-          backsideThickness={Math.max(0.15, result.finalCenterThickness * 0.02)}
+          backsideThickness={Math.max(0.1, result.finalCenterThickness * 0.02)}
           side={THREE.DoubleSide}
         />
       </mesh>

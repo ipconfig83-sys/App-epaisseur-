@@ -33,10 +33,12 @@ function makeBenchTexture(): THREE.Texture {
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
 
-  // Lab paper background — slightly bluish white
+  // Lab paper background — bright, almost white, so the lens
+  // transmission samples a bright source and reads as a transparent
+  // resin piece rather than a dark mirror.
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#e8eef5');
-  grad.addColorStop(1, '#c9d4e0');
+  grad.addColorStop(0, '#f4f7fb');
+  grad.addColorStop(1, '#e0e6ef');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
