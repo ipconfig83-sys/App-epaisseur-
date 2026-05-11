@@ -72,6 +72,7 @@ export default {
     visualization: 'العرض ثلاثي الأبعاد',
     warnings: 'التشخيصات',
     engine: 'تفاصيل المحرك',
+    profile360: 'محيط الحافة 360°',
   },
   engine: {
     meridians: 'المحاور الرئيسية',

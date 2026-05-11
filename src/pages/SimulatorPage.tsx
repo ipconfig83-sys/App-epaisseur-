@@ -127,8 +127,8 @@ export default function SimulatorPage() {
             />
           </GlassCard>
 
-          <GlassCard title="Profile / cross-section" icon={<Sparkles size={14} />}>
-            <div className="aspect-[2.4/1] w-full">
+          <GlassCard title={t('sections.profile360')} icon={<Sparkles size={14} />}>
+            <div className="aspect-[1.75/1] w-full">
               <ProfileView lens={lens} frame={frame} result={result} />
             </div>
           </GlassCard>

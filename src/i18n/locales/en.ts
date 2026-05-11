@@ -72,6 +72,7 @@ export default {
     visualization: '3D visualization',
     warnings: 'Diagnostics',
     engine: 'Engine details',
+    profile360: '360° edge profile',
   },
   engine: {
     meridians: 'Principal meridians',

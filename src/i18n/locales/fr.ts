@@ -72,6 +72,7 @@ export default {
     visualization: 'Visualisation 3D',
     warnings: 'Diagnostics',
     engine: 'Détails moteur',
+    profile360: 'Profil 360° du bord',
   },
   engine: {
     meridians: 'Méridiens principaux',
