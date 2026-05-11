@@ -24,3 +24,30 @@ export const DENSITY_BY_INDEX: Record<number, number> = {
   1.67: 1.36,
   1.74: 1.47,
 };
+
+// ----- Per-index Abbe numbers (chromatic dispersion) -----------------
+// Lower Abbe → more chromatic dispersion → more visible rainbow on
+// lens edges. Used by the 3D material to tune chromaticAberration.
+export const ABBE_BY_INDEX: Record<number, number> = {
+  1.5: 58,
+  1.56: 36,
+  1.59: 30,
+  1.6: 41,
+  1.67: 32,
+  1.74: 33,
+};
+
+// ----- Per-index body-tint reference colour --------------------------
+// Real ophthalmic substrates carry an almost imperceptible body
+// tint. CR-39 has a very faint green, polycarbonate is essentially
+// neutral, high-index 1.67/1.74 can show a slight warm cast.
+// Values here are tuned for a believable transmission look — never
+// strong enough to read as "tinted glass" on the simulator.
+export const TINT_BY_INDEX: Record<number, string> = {
+  1.5: '#f3fbf6',   // very faint green
+  1.56: '#f5faff',  // very faint blue
+  1.59: '#f8fbff',  // neutral
+  1.6: '#f7fbff',   // neutral
+  1.67: '#fefcf6',  // very faint warm
+  1.74: '#fdf9f0',  // slightly more warm
+};

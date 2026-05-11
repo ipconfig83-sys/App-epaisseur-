@@ -1,20 +1,21 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows, Float } from '@react-three/drei';
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, RotateCw, ZoomIn, ZoomOut, Layers } from 'lucide-react';
 import LensMesh from './LensMesh';
 import Backdrop from './Backdrop';
-import type { CustomShape, FrameData, LensData } from '@/types';
+import type { CustomShape, FrameData, LensData, ThicknessResult } from '@/types';
 
 interface SceneProps {
   lens: LensData;
   frame: FrameData;
-  compareWith?: LensData; // optional second lens for comparison
+  result: ThicknessResult;
+  compareWith?: { lens: LensData; result: ThicknessResult };
   customShape?: CustomShape | null;
 }
 
-export default function Scene({ lens, frame, compareWith, customShape = null }: SceneProps) {
+export default function Scene({ lens, frame, result, compareWith, customShape = null }: SceneProps) {
   const { t } = useTranslation();
   const [autoRotate, setAutoRotate] = useState(true);
   const [showWire, setShowWire] = useState(false);
@@ -34,54 +35,58 @@ export default function Scene({ lens, frame, compareWith, customShape = null }: 
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         id="presbyta-3d-canvas"
       >
-        <color attach="background" args={['#050d1d']} />
-        <ambientLight intensity={0.55} />
+        <color attach="background" args={['#0c1426']} />
+        {/* Lab-style soft ambient + neutral key light, no warm rim
+            (the previous gold rim made the lens look painted). */}
+        <ambientLight intensity={0.65} />
         <directionalLight
-          position={[3, 4, 5]}
-          intensity={1.1}
+          position={[2.5, 3.5, 4]}
+          intensity={1.0}
           castShadow
           shadow-mapSize={[1024, 1024]}
+          color="#ffffff"
         />
-        <directionalLight position={[-3, 2, -2]} intensity={0.5} color="#ecc154" />
-        <pointLight position={[0, 1.5, 2.5]} intensity={0.4} color="#ffffff" />
+        <directionalLight position={[-2, 1, -1]} intensity={0.35} color="#cfd8e3" />
 
         <Suspense fallback={null}>
-          {/* Eye-chart backdrop — gives the refracting glass something
-              recognisable to bend, which is what makes a transparent
-              lens "read" as glass on screen. */}
+          {/* Calibration reticle behind the lens — provides readable
+              content for refraction without any cinematic styling. */}
           <Backdrop />
 
-          <Environment preset="city" background={false} />
-          <Float speed={autoRotate ? 0.8 : 0} rotationIntensity={0.25} floatIntensity={0.2}>
-            <group position={compareWith ? [-1.4, 0, 0] : [0, 0, 0]}>
+          <Environment preset="apartment" background={false} />
+
+          {/* No Float — a measurement object should not bob in space.
+              Rotation is driven by OrbitControls.autoRotate so the
+              user can stop it cleanly. */}
+          <group position={compareWith ? [-1.4, 0, 0] : [0, 0, 0]}>
+            <LensMesh
+              lens={lens}
+              frame={frame}
+              result={result}
+              cut
+              showWireframe={showWire}
+              customShape={customShape}
+            />
+          </group>
+          {compareWith && (
+            <group position={[1.4, 0, 0]}>
               <LensMesh
-                lens={lens}
+                lens={compareWith.lens}
                 frame={frame}
+                result={compareWith.result}
                 cut
                 showWireframe={showWire}
                 customShape={customShape}
               />
             </group>
-            {compareWith && (
-              <group position={[1.4, 0, 0]}>
-                <LensMesh
-                  lens={compareWith}
-                  frame={frame}
-                  cut
-                  tint="#fff8e3"
-                  showWireframe={showWire}
-                  customShape={customShape}
-                />
-              </group>
-            )}
-          </Float>
+          )}
           <ContactShadows
-            position={[0, -1.4, 0]}
-            opacity={0.35}
-            scale={8}
-            blur={2.6}
+            position={[0, -1.3, 0]}
+            opacity={0.3}
+            scale={7}
+            blur={2.4}
             far={3}
-            color="#020a18"
+            color="#04101e"
           />
         </Suspense>
 

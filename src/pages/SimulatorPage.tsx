@@ -35,6 +35,10 @@ export default function SimulatorPage() {
   const compareLens = compareIndex
     ? { ...lens, index: compareIndex as any }
     : undefined;
+  const compareResult = useMemo(
+    () => (compareLens ? runSimulation(compareLens, frame) : null),
+    [compareLens, frame]
+  );
 
   return (
     <div id="presbyta-report" className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
@@ -122,7 +126,12 @@ export default function SimulatorPage() {
             <Scene
               lens={lens}
               frame={frame}
-              compareWith={compareLens}
+              result={result}
+              compareWith={
+                compareLens && compareResult
+                  ? { lens: compareLens, result: compareResult }
+                  : undefined
+              }
               customShape={customShape}
             />
           </GlassCard>
