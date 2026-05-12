@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, ContactShadows } from '@react-three/drei';
 import { Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box, RotateCw, ZoomIn, ZoomOut, Layers } from 'lucide-react';
@@ -72,10 +72,20 @@ export default function Scene({ lens, frame, result, compareWith, customShape = 
               />
             </group>
           )}
-          {/* No Environment, no ContactShadows.
-              Cinematic reflections and dark shadows under the lens
-              were what made the previous render look like polished
-              black glass instead of ophthalmic resin. */}
+          {/* Soft contact shadow — anchors the lens to a bench
+              surface so it does not read as floating in space.
+              Tuned subtle (opacity 0.22, blur 3) so it does not
+              produce the "dark mirror" look of an aggressive
+              ground shadow. */}
+          <ContactShadows
+            position={[0, -1.1, 0]}
+            opacity={0.22}
+            scale={5}
+            blur={3.0}
+            far={2.5}
+            resolution={512}
+            color="#1a2230"
+          />
         </Suspense>
 
         <OrbitControls
